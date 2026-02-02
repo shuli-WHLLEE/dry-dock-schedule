@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 年度船舶塢修總表 (Final V5)</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, updateDoc, writeBatch, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        
+        window.firebaseModules = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, collection, doc, onSnapshot, updateDoc, writeBatch, query, orderBy, getDocs };
+    </script>
+
+    <style>
+        body { font-size: 14px; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        td { vertical-align: middle; }
+        input[type="date"] { background-color: transparent; font-family: monospace; color: inherit; font-weight: inherit; font-size: inherit; }
+        
+        /* 變更提示專用樣式 - 紅字粗體 + 亮黃底 */
+        .changed-cell { 
+            background-color: #fef08a !important; /* 亮黃色 */
+            color: #dc2626 !important;           /* 紅色 */
+            font-weight: 900 !important;         /* 粗體 */
+        }
+        /* 讓內部的 input/select 也繼承樣式 */
+        .changed-cell input, .changed-cell select, .changed-cell span { 
+            color: #dc2626 !important; 
+            font-weight: 900 !important; 
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+    
+    <!-- ★★★ Firebase Config (Updated) ★★★ -->
+    <script>
+        window.USER_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyBjnlDmMoXLXfmfT0cx8Uys_lE98GE1G0s",
+            authDomain: "dry-dock-schedule.firebaseapp.com",
+            projectId: "dry-dock-schedule",
+            storageBucket: "dry-dock-schedule.firebasestorage.app",
+            messagingSenderId: "443381055158",
+            appId: "1:443381055158:web:023f6b3db6f23a8f19f017",
+            measurementId: "G-LPN336T7SN"
+        };
+    </script>
+
+    <!-- ★★★ 原始資料 (37筆正確版) ★★★ -->
+    <script id="default-csv-data" type="text/csv">
+NO.,NAME,船名,Docking Due,Survey,修期,PIC,AUD,Start,To,End,Duration,Unit,Factory,Renovation,Scrubber,LOGO,REMARK
+1,WH326,璀春,2026/3/4,1.特檢,28,姚洪香,V,2026/1/1,~,2026/1/28,28,days,廣東中遠,V,V,V,5/8:企劃 配合2026春節調整修期.
+2,WH176,卓春,2026/3/25,2.特檢,17,張簡志鈞,V,2026/1/12,~,2026/2/6,26,days,蛇口友聯,,V,V,
+3,WH611,冠春,2026/3/16,5.特檢,33,鄧健雄,V,2026/2/25,~,2026/3/29,33,days, 青島北海,,,V,2025/11/10變更修期2026/2/18+40天
+4,WH627,絳春,2026/4/23,4.特檢,24,蕭應龍,V,2026/2/25,~,2026/3/20,24,days,華潤大東,,,V,2025/11/10變更修期2026/2/18+30天
+5,WH516,新春,2026/3/28,3.中檢,26,周 進,V,2026/2/25,~,2026/3/12,16,days,廣東中遠,V,,V,
+6,WH327,璨春,2026/3/25,1.特檢,28,蕭應龍,N,2026/2/27,~,2026/3/26,28,days,廣東中遠,V,V,V,5/8:企劃 配合2026春節調整修期.
+7,WH278,逸春,2026/4/7,1.特檢,26,陳國勝,V,2026/2/28,~,2026/3/13,14,days,文沖,,,V,
+8,WH285,桂春,2026/4/30,1.特檢,26,台東潤,V,2026/3/15,~,2026/3/28,14,days,文沖,V,,V,
+9,WH517,局春,2026/6/1,3.中檢,26,劉建國,V,2026/3/24,~,2026/4/8,16,days,青島北海,V,,V,2025/11/10變更修期2026/2/18+33天
+10,WH313,富春,2026/4/20,4.特檢,24,劉外生,V,2026/3/26,~,2026/4/18,24,days,廣東中遠,,,V,313/315其中一船做X7防污漆
+11,WH328,亮春,2026/5/13,1.特檢,28,丁招勇,M,2026/4/3,~,2026/4/16,14,days,廣東中遠,V,,V,5/8:企劃 配合2026春節調整修期.
+12,WH286,騰春,2026/5/15,1.特檢,26,劉外生,V,2026/4/5,~,2026/4/18,14,days,廣東中遠,V,,V,
+13,WH329,麗春,2026/5/27,1.特檢,28,陳敏薇,V,2026/4/20,~,2026/5/3,14,days,廣東中遠,V,,V,5/8:企劃 配合2026春節調整修期.
+14,WH287,芳春,2026/7/5,1.特檢,26,藍志達,V,2026/4/22,~,2026/5/5,14,days,廣東中遠,V,,V,
+15,WH288,源春,2026/8/1,1.特檢,26,黃怡仁,V,2026/5/16,~,2026/5/29,14,days,廣東中遠,V,,V,
+16,WH289,昌春,2026/9/29,1.特檢,26,盛利寧,N,2026/7/1,~,2026/7/14,14,days,文沖,V,,V,
+17,WH315,貴春,2026/9/15,4.特檢,24,周 進,V,2026/7/3,~,2026/7/26,24,days,廣東中遠,,,V,313/315其中一船做X7防污漆
+18,WH626,紫春,2026/9/5,4.特檢,24,卓錦成,V,2026/7/15,~,2026/8/7,24,days,舟山中遠,,,V,
+19,WH276,越春,2026/9/11,2.中檢,26,陳國勝,V,2026/7/29,~,2026/8/11,14,days,文沖,,,V,
+20,WH612,群春,2026/9/24,5.特檢,33,劉哲宇,V,2026/8/12,~,2026/9/13,33,days,華豐,,,V,
+21,WH271,百春,2026/10/13,3.特檢,26,鄧健雄,V,2026/8/15,~,2026/9/4,21,days,蛇口友聯,V,,V,
+22,WH613,倫春,2026/9/27,5.特檢,33,陳啟豪,V,2026/8/23,~,2026/9/24,33,days,浙江友聯,,,V,
+23,WHV01,雍春,2026/10/14,2.中檢,30,羅國治,M,2026/9/15,~,2026/10/14,30,days,浙江友聯,,V,V,
+24,WH290,安春,2026/10/28,1.特檢,26,周 進,V,2026/9/25,~,2026/10/8,14,days,廣東中遠,V,,V,
+25,WH272,年春,2026/12/15,3.特檢,26,林修宇,V,2026/10/10,~,2026/10/30,21,days,蛇口友聯,V,,V,
+26,WH291,穩春,2026/12/19,1.特檢,26,陳啟豪,V,2026/11/11,~,2026/11/24,14,days,廣東中遠,V,,V,
+27,WH292,承春,2027/2/22,1.特檢,26,陳家和,V,2026/11/28,~,2026/12/11,14,days,廣東中遠,V,,V,
+28,WH625,和春,2027/3/17,5.中檢,31,張簡志鈞,V,2026/12/4,~,2027/1/3,31,days,舟山中遠,,,V,
+29,WH273,基春,2027/2/14,3.特檢,26,陳逸銘,M,2026/12/19,~,2027/1/8,21,days,蛇口友聯,,,V,
+30,WH171,興春,2027/3/12,4.中檢,26,丁招勇,N,2027/1/14,~,2027/2/3,21,days,廣東中遠,V,,V,
+31,WH293,恩春,2027/3/30,1.特檢,26,劉哲宇,V,2027/2/20,~,2027/3/5,14,days,廣東中遠,V,,V,
+32,WH172,運春,2027/4/18,4.中檢,26,陳家和,V,2027/3/15,~,2027/4/4,21,days,蛇口友聯,V,,V,
+33,WH721,誠春,2027/4/24,4.中檢,30,陳邦偉,,2027/2/11,~,2027/3/12,30,days,浙江友聯,V,V,V,
+34,WH722,信春,2027/5/3,4.中檢,30,藍志達,,2027/2/11,~,2027/3/12,30,days,青島北海,V,V,V,
+35,WH522,瑞春,2027/5/8,4.中檢,26,黃怡仁,,2027/2/22,~,2027/3/17,24,days,青島北海,,,V,
+36,WH621,麟春,2027/5/24,4.中檢,23,藍志達,,2027/3/24,~,2027/4/15,23,days,青島北海,,,V,
+37,WH723,隆春,2027/5/29,4.中檢,30,鄧健雄,,2027/4/8,~,2027/5/7,30,days,青島北海,V,V,V,
+    </script>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useRef, useEffect } = React;
+        
+        // --- 內建圖示 (Fallback) ---
+        const Icon = ({ path, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {path}
+            </svg>
+        );
+        
+        const Icons = {
+            Search: (props) => <Icon {...props} path={<><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>} />,
+            Filter: (props) => <Icon {...props} path={<><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>} />,
+            Ship: (props) => <Icon {...props} path={<><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.9 5.8 2.8 8"/><path d="M15 10l-3-8-3 8"/></>} />, 
+            Anchor: (props) => <Icon {...props} path={<><circle cx="12" cy="5" r="3"/><line x1="12" x2="12" y1="22" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></>} />,
+            LayoutGrid: (props) => <Icon {...props} path={<><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></>} />,
+            List: (props) => <Icon {...props} path={<><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></>} />,
+            Download: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>} />,
+            Settings: (props) => <Icon {...props} path={<><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></>} />,
+            User: (props) => <Icon {...props} path={<><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>} />,
+            Info: (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></>} />,
+            Lock: (props) => <Icon {...props} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>} />,
+            Unlock: (props) => <Icon {...props} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>} />,
+            Hammer: (props) => <Icon {...props} path={<><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9"/><path d="M17.64 15 22 10.64"/><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V7.86c0-.55-.45-1-1-1H14c-.55 0-1 .45-1 1v3.8c0 .85-.33 1.65-.93 2.25L10.82 15"/></>} />,
+            Wind: (props) => <Icon {...props} path={<><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></>} />,
+            Trash: (props) => <Icon {...props} path={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>} />,
+            Save: (props) => <Icon {...props} path={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>} />,
+            Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></>} />,
+            RefreshCw: (props) => <Icon {...props} path={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>} />,
+        };
+
+        // --- Helper Components ---
+        const StatCard = ({ icon, label, value, sub, valueColor = "text-slate-800", bgColor = "bg-white" }) => (
+            <div className={`${bgColor} p-4 rounded-xl shadow border border-slate-200 flex items-center gap-4 transition hover:shadow-md`}>
+                <div className="p-3 bg-white/80 rounded-full shadow-sm">{icon}</div>
+                <div>
+                    <p className="text-sm text-slate-500 font-medium">{label}</p>
+                    <div className="flex items-baseline gap-1">
+                        <span className={`text-3xl font-extrabold ${valueColor}`}>{value}</span>
+                        <span className="text-xs text-slate-400 font-medium">{sub}</span>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const CheckMark = ({ checked }) => (
+            <div className={`inline-flex justify-center items-center w-6 h-6 rounded-full ${checked ? 'bg-slate-100 text-green-600' : 'text-slate-200'}`}>
+                {checked ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg> : <span>-</span>}
+            </div>
+        );
+
+        const Badge = ({ text, color }) => (
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${color}`}>{text}</span>
+        );
+
+        const App = () => {
+            const [scheduleData, setScheduleData] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [selectedFactory, setSelectedFactory] = useState('All');
+            const [selectedPIC, setSelectedPIC] = useState('All');
+            const [selectedRenovation, setSelectedRenovation] = useState('All');
+            const [selectedScrubber, setSelectedScrubber] = useState('All');
+            const [viewMode, setViewMode] = useState('table');
+            const [dataStatus, setDataStatus] = useState('讀取中...');
+            const [isEditable, setIsEditable] = useState(false);
+            const [showPasswordModal, setShowPasswordModal] = useState(false);
+            const [passwordInput, setPasswordInput] = useState('');
+            const [initialDataMap, setInitialDataMap] = useState({}); 
+            const COLLECTION_NAME = 'docking_schedule_2026';
+
+            const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, collection, doc, onSnapshot, updateDoc, writeBatch, getDocs, signInWithCustomToken } = window.firebaseModules;
+            const [db, setDb] = useState(null);
+            
+            // --- Helper: EditableCell ---
+            const EditableCell = ({ value, onChange, type = "text", options = [] }) => {
+                if (!isEditable) return <span>{value}</span>;
+                if (type === "select") {
+                    return (
+                        <select className="bg-white border border-blue-300 rounded px-1 py-0.5 text-sm w-full" value={value} onChange={(e) => onChange(e.target.value)}>
+                            {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                    );
+                }
+                if (type === "checkbox") {
+                    const isChecked = value && value.toUpperCase().includes('V');
+                    return (
+                        <input type="checkbox" checked={isChecked} onChange={(e) => onChange(e.target.checked ? 'V' : '')} className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" />
+                    );
+                }
+                return <input type="text" className="bg-white border border-blue-300 rounded px-2 py-1 text-sm w-full" value={value} onChange={(e) => onChange(e.target.value)} />;
+            };
+
+            // 1. 初始化
+            useEffect(() => {
+                // 建立原始資料對照表
+                const embeddedCsv = document.getElementById('default-csv-data');
+                if (embeddedCsv) {
+                    const rows = parseCSV(embeddedCsv.textContent.trim());
+                    const map = {};
+                    rows.forEach(r => { map[r.no] = r; });
+                    setInitialDataMap(map);
+                }
+
+                const initFirebase = async () => {
+                    try {
+                        let configObj = window.USER_FIREBASE_CONFIG;
+                        const app = initializeApp(configObj);
+                        const authInstance = getAuth(app);
+                        const dbInstance = getFirestore(app);
+                        setDb(dbInstance);
+                        
+                        signInAnonymously(authInstance).catch(e => {
+                            console.error("Auth failed", e);
+                        });
+                    } catch (e) {
+                        console.error("Firebase init failed", e);
+                    }
+                };
+                initFirebase();
+            }, []);
+
+            // 2. 連線後監聽資料
+            useEffect(() => {
+                if (!db) return;
+
+                const q = collection(db, COLLECTION_NAME);
+                const unsubscribe = onSnapshot(q, async (snapshot) => {
+                    if (snapshot.empty) {
+                        // 資料庫為空，執行初始化
+                        await initializeDatabase();
+                    } else {
+                        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        const sortedDocs = sortDataByDate(docs);
+                        setScheduleData(sortedDocs);
+                        setDataStatus('已連線 (雲端同步)');
+                    }
+                }, (error) => {
+                    console.error("Firestore error:", error);
+                    if (error.code === 'permission-denied') {
+                         setDataStatus('權限不足 (請檢查 Rules)');
+                    } else {
+                         setDataStatus('連線錯誤');
+                    }
+                });
+
+                return () => unsubscribe();
+            }, [db]);
+
+            const initializeDatabase = async () => {
+                if (!db) return; 
+                setDataStatus('初始化中...');
+                try {
+                    const embeddedCsv = document.getElementById('default-csv-data');
+                    const rows = parseCSV(embeddedCsv.textContent.trim());
+                    const batch = writeBatch(db);
+                    rows.forEach((row) => {
+                        const docRef = doc(collection(db, COLLECTION_NAME));
+                        batch.set(docRef, row);
+                    });
+                    await batch.commit();
+                } catch (error) {
+                    console.error("Init failed:", error);
+                    setDataStatus('初始化失敗');
+                }
+            };
+
+            // --- Helpers ---
+            const sortDataByDate = (data) => {
+                return [...data].sort((a, b) => {
+                    const dateA = new Date(formatToISO(a.rangeStart));
+                    const dateB = new Date(formatToISO(b.rangeStart));
+                    if (isNaN(dateA)) return 1;
+                    if (isNaN(dateB)) return -1;
+                    return dateA - dateB;
+                });
+            };
+
+            const formatToISO = (dateStr) => {
+                if (!dateStr) return '';
+                const parts = dateStr.split('/');
+                if (parts.length !== 3) return '';
+                const y = parts[0];
+                const m = parts[1].padStart(2, '0');
+                const d = parts[2].padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            };
+
+            const formatFromISO = (isoDate) => {
+                if (!isoDate) return '';
+                const parts = isoDate.split('-');
+                if (parts.length !== 3) return '';
+                return `${parts[0]}/${parseInt(parts[1])}/${parseInt(parts[2])}`;
+            };
+
+            const parseCSV = (csvText) => {
+                const lines = csvText.split(/\r\n|\n/).map(l => l.trim()).filter(l => l);
+                const headerRowIndex = 0; 
+                const headers = lines[headerRowIndex].split(',').map(h => h.trim().toUpperCase());
+                const colMap = {};
+                headers.forEach((h, i) => {
+                    colMap[h] = i;
+                    if (h.includes('船名')) colMap['CHNAME'] = i;
+                    if (h.includes('船廠') || h.includes('FACTORY')) colMap['FACTORY'] = i;
+                    if (h.includes('生活區') || h.includes('RENOVATION')) colMap['RENOVATION'] = i;
+                    if (h.includes('SCRUBBER')) colMap['SCRUBBER'] = i;
+                    if (h.includes('LOGO')) colMap['LOGO'] = i;
+                    if (h.includes('REMARK')) colMap['REMARK'] = i;
+                    if (h.includes('PIC')) colMap['PIC'] = i;
+                    if (h.includes('DOCKING DUE')) colMap['DOCKDUE'] = i;
+                    if (h.includes('SURVEY')) colMap['SURVEY'] = i;
+                    if (h.includes('修期') || h.includes('DURATION')) colMap['DAYS'] = i;
+                    if (h.includes('START') || h.includes('SD')) colMap['START'] = i;
+                    if (h.includes('END')) colMap['END'] = i;
+                });
+
+                const data = [];
+                for (let i = headerRowIndex + 1; i < lines.length; i++) {
+                    const row = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, '').replace(/'/g, ''));
+                    if (row.length < 5) continue;
+                    let rangeStart = row[colMap['START'] || 8] || '';
+                    let rangeEnd = row[colMap['END'] || 10] || '';
+                    data.push({
+                        no: row[colMap['NO'] || 0] || '', 
+                        name: row[colMap['NAME'] || 1] || '',
+                        chName: row[colMap['CHNAME'] || 2] || '',
+                        dockDue: row[colMap['DOCKDUE'] || 3] || '',
+                        survey: row[colMap['SURVEY'] || 4] || '',
+                        pic: row[colMap['PIC'] || 6] || '',
+                        factory: row[colMap['FACTORY'] || 13] || 'TBD',
+                        days: row[colMap['DAYS'] || 5] || '',
+                        rangeStart: rangeStart,
+                        rangeEnd: rangeEnd,
+                        renovation: row[colMap['RENOVATION'] || 14] || '',
+                        scrubber: row[colMap['SCRUBBER'] || 15] || '',
+                        logo: row[colMap['LOGO'] || 16] || '',
+                        remark: row[colMap['REMARK'] || 17] || ''
+                    });
+                }
+                return data;
+            };
+
+            const handleUpdate = async (id, updates) => {
+                if (!db || !isEditable) return;
+                try {
+                    const docRef = doc(db, COLLECTION_NAME, id);
+                    await updateDoc(docRef, updates);
+                } catch (e) {
+                    console.error("Update failed", e);
+                }
+            };
+
+            const handleDateChange = (id, field, newVal) => {
+                const formattedDate = formatFromISO(newVal);
+                handleUpdate(id, { [field]: formattedDate });
+            };
+
+            const toggleEditMode = () => {
+                if (isEditable) {
+                    setIsEditable(false);
+                } else {
+                    setShowPasswordModal(true);
+                }
+            };
+            
+            const handlePasswordSubmit = (e) => {
+                e.preventDefault();
+                if (passwordInput === "wanhai168") {
+                    setIsEditable(true);
+                    setShowPasswordModal(false);
+                    setPasswordInput('');
+                } else {
+                    alert("密碼錯誤");
+                    setPasswordInput('');
+                }
+            };
+
+            const handleExport = () => {
+                const headers = ['NO.', 'NAME', '船名', 'Docking Due', 'Survey', '修期', 'PIC', 'Start', 'End', '船廠', '生活區裝修', 'scrubber加裝', 'LOGO', 'REMARK'];
+                const csvContent = [
+                    headers.join(','),
+                    ...scheduleData.map((row, index) => [
+                        index + 1,
+                        row.name, row.chName, row.dockDue, row.survey, row.days, row.pic, 
+                        row.rangeStart, row.rangeEnd,
+                        row.factory, row.renovation, row.scrubber, row.logo, `"${row.remark}"`
+                    ].join(','))
+                ].join('\n');
+                const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' }); 
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `docking_schedule_2026_${new Date().toISOString().slice(0,10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const factories = useMemo(() => ['All', ...new Set(scheduleData.map(item => item.factory).filter(Boolean))], [scheduleData]);
+            const pics = useMemo(() => ['All', ...new Set(scheduleData.map(item => item.pic).filter(Boolean))], [scheduleData]);
+
+            const filteredData = useMemo(() => {
+                return scheduleData.filter(item => {
+                    const matchesSearch = 
+                        (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                        (item.chName && item.chName.includes(searchTerm)) ||
+                        (item.pic && item.pic.includes(searchTerm));
+                    const matchesFactory = selectedFactory === 'All' || item.factory === selectedFactory;
+                    const matchesPIC = selectedPIC === 'All' || item.pic === selectedPIC;
+                    const hasRenovation = item.renovation && item.renovation.toUpperCase().includes('V');
+                    const matchesRenovation = selectedRenovation === 'All' || (selectedRenovation === 'Yes' && hasRenovation);
+                    const hasScrubber = item.scrubber && item.scrubber.toUpperCase().includes('V');
+                    const matchesScrubber = selectedScrubber === 'All' || (selectedScrubber === 'Yes' && hasScrubber);
+                    return matchesSearch && matchesFactory && matchesPIC && matchesRenovation && matchesScrubber;
+                });
+            }, [scheduleData, searchTerm, selectedFactory, selectedPIC, selectedRenovation, selectedScrubber]);
+
+            const stats = useMemo(() => {
+                const totalShips = filteredData.length;
+                const logoCount = totalShips; 
+                const renovationCount = filteredData.filter(i => i.renovation && i.renovation.toUpperCase().includes('V')).length;
+                const scrubberCount = filteredData.filter(i => i.scrubber && i.scrubber.toUpperCase().includes('V')).length;
+                return { totalShips, logoCount, renovationCount, scrubberCount };
+            }, [filteredData]);
+
+            // 比對樣式 Helper
+            const getCellClass = (row, field) => {
+                const originalRow = initialDataMap[row.no];
+                const baseClass = "px-4 py-3";
+                const centerClass = "px-4 py-3 text-center";
+                
+                if (!originalRow) return baseClass;
+                let isChanged = false;
+                
+                if (field === 'range') {
+                    if (row.rangeStart !== originalRow.rangeStart || row.rangeEnd !== originalRow.rangeEnd) {
+                        isChanged = true;
+                    }
+                } else {
+                    if ((row[field] || '').trim() !== (originalRow[field] || '').trim()) {
+                        isChanged = true;
+                    }
+                }
+
+                if (isChanged) return `${centerClass} changed-cell`;
+                return centerClass;
+            };
+            
+            const getChangeClass = (row, field) => {
+                const originalRow = initialDataMap[row.no];
+                 if (!originalRow) return "";
+                 if ((row[field] || '').trim() !== (originalRow[field] || '').trim()) return "changed-cell";
+                 return "";
+            };
+
+            const getSurveyClass = (survey) => {
+                if (!survey) return "text-slate-600 bg-yellow-50/30";
+                if (survey.includes("特檢")) return "text-red-600 font-bold";
+                if (survey.includes("中檢")) return "text-blue-600 font-bold";
+                return "text-slate-600 bg-yellow-50/30";
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
+                    <nav className="bg-slate-800 text-white p-4 shadow-lg sticky top-0 z-50">
+                        <div className="max-w-full px-4 mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div className="flex items-center gap-3">
+                                <Icons.Anchor className="h-6 w-6 text-blue-400" />
+                                <div className="flex flex-col">
+                                    <h1 className="text-xl font-bold tracking-wide">2026 年度船舶塢修總表</h1>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] text-slate-400 font-mono">狀態: {dataStatus}</span>
+                                        {isEditable && <span className="text-[10px] bg-red-600 text-white px-1.5 rounded animate-pulse">編輯模式</span>}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                                <button onClick={toggleEditMode} className={`flex items-center gap-2 px-3 py-1.5 rounded transition font-bold shadow-sm ${isEditable ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'}`}>
+                                    {isEditable ? <Icons.Unlock className="w-4 h-4" /> : <Icons.Lock className="w-4 h-4" />}
+                                    {isEditable ? '結束編輯' : '解鎖編輯'}
+                                </button>
+                                <button onClick={handleExport} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded transition font-bold shadow-sm hover:shadow">
+                                    <Icons.Download className="w-4 h-4" /> 匯出 CSV
+                                </button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-full px-4 mx-auto p-4 md:p-6 space-y-6">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <StatCard icon={<Icons.Ship className="text-blue-600 w-6 h-6" />} label="計畫修船數" value={stats.totalShips} sub="艘" valueColor="text-blue-700" bgColor="bg-blue-50" />
+                            <StatCard icon={<Icons.Anchor className="text-emerald-600 w-6 h-6" />} label="換新 LOGO" value={stats.logoCount} sub="艘" valueColor="text-emerald-700" bgColor="bg-emerald-50" />
+                            <StatCard icon={<Icons.LayoutGrid className="text-purple-600 w-6 h-6" />} label="生活區裝修" value={stats.renovationCount} sub="艘" valueColor="text-purple-700" bgColor="bg-purple-50" />
+                            <StatCard icon={<Icons.Filter className="text-orange-600 w-6 h-6" />} label="加裝 Scrubber" value={stats.scrubberCount} sub="艘" valueColor="text-orange-700" bgColor="bg-orange-50" />
+                        </div>
+
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col xl:flex-row gap-4 justify-between items-center">
+                            <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-wrap">
+                                <div className="relative group w-full md:w-auto">
+                                    <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <input type="text" placeholder="搜尋..." className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg w-full md:w-48 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                                </div>
+                                <select className="pl-2 pr-8 py-2 border border-slate-200 rounded-lg w-full md:w-40 bg-white text-sm" value={selectedFactory} onChange={(e) => setSelectedFactory(e.target.value)}>
+                                    {factories.map(f => <option key={f} value={f}>{f === 'All' ? '所有船廠' : f}</option>)}
+                                </select>
+                                <select className="pl-2 pr-8 py-2 border border-slate-200 rounded-lg w-full md:w-32 bg-white text-sm" value={selectedPIC} onChange={(e) => setSelectedPIC(e.target.value)}>
+                                    {pics.map(p => <option key={p} value={p}>{p === 'All' ? '所有 PIC' : p}</option>)}
+                                </select>
+                                <select className="pl-2 pr-8 py-2 border border-slate-200 rounded-lg w-full md:w-32 bg-white text-sm" value={selectedRenovation} onChange={(e) => setSelectedRenovation(e.target.value)}>
+                                    <option value="All">生活區(全)</option>
+                                    <option value="Yes">有裝修</option>
+                                </select>
+                                <select className="pl-2 pr-8 py-2 border border-slate-200 rounded-lg w-full md:w-32 bg-white text-sm" value={selectedScrubber} onChange={(e) => setSelectedScrubber(e.target.value)}>
+                                    <option value="All">Scrubber(全)</option>
+                                    <option value="Yes">有加裝</option>
+                                </select>
+                            </div>
+                            <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
+                                <button onClick={() => setViewMode('table')} className={`p-2 rounded ${viewMode === 'table' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}><Icons.List className="h-5 w-5" /></button>
+                                <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}><Icons.LayoutGrid className="h-5 w-5" /></button>
+                            </div>
+                        </div>
+
+                        {viewMode === 'table' ? (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 uppercase tracking-wider">
+                                            <tr>
+                                                <th className="px-4 py-3 whitespace-nowrap w-12 text-center">NO.</th>
+                                                <th className="px-4 py-3 whitespace-nowrap">船名</th>
+                                                <th className="px-4 py-3 whitespace-nowrap">船廠</th>
+                                                <th className="px-4 py-3 whitespace-nowrap">PIC</th>
+                                                <th className="px-4 py-3 whitespace-nowrap">入塢期限</th>
+                                                <th className="px-4 py-3 whitespace-nowrap bg-yellow-50/50">Survey</th>
+                                                <th className="px-4 py-3 whitespace-nowrap min-w-[280px]">預排修期 (Start → End)</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-center">天數</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-center">生活區</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-center">Scrubber</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-center">LOGO</th>
+                                                <th className="px-4 py-3 min-w-[200px]">備註</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {filteredData.map((row, index) => (
+                                                <tr key={row.id} className="hover:bg-blue-50/30 transition duration-150">
+                                                    <td className="px-4 py-3 text-slate-400 font-mono font-bold text-center">{index + 1}</td>
+                                                    <td className="px-4 py-3"><div className="font-bold text-slate-800">{row.name}</div><div className="text-xs text-slate-500">{row.chName}</div></td>
+                                                    
+                                                    {/* Factory */}
+                                                    <td className={`px-4 py-3 ${getChangeClass(row, 'factory')}`}><EditableCell value={row.factory} onChange={(val) => handleUpdate(row.id, { factory: val })} type="select" options={['廣東中遠', '蛇口友聯', '青島北海', '華潤大東', '浙江友聯', '華豐', '文沖', '舟山中遠', 'TBD']} /></td>
+                                                    
+                                                    <td className="px-4 py-3 text-slate-700">{row.pic}</td>
+                                                    <td className="px-4 py-3 text-red-600 font-bold">{row.dockDue}</td>
+                                                    <td className={`px-4 py-3 ${getSurveyClass(row.survey)}`}>{row.survey}</td>
+                                                    
+                                                    {/* Range - Font Size Normal */}
+                                                    <td className={getCellClass(row, 'range').replace('text-center', '')}>
+                                                        <div className="flex items-center gap-2">
+                                                            {isEditable ? (
+                                                                <><input type="date" value={formatToISO(row.rangeStart)} onChange={(e) => handleDateChange(row.id, 'rangeStart', e.target.value)} className="w-32 border border-slate-300 rounded px-1 font-normal text-lg"/><span>➜</span><input type="date" value={formatToISO(row.rangeEnd)} onChange={(e) => handleDateChange(row.id, 'rangeEnd', e.target.value)} className="w-32 border border-slate-300 rounded px-1 font-normal text-lg"/></>
+                                                            ) : (
+                                                                <div className="text-slate-700 font-mono text-lg font-normal"><span className="text-slate-800">{row.rangeStart}</span><span className="mx-2 text-slate-400">➜</span><span>{row.rangeEnd}</span></div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    
+                                                    <td className="px-4 py-3 text-center font-bold">{row.days}</td>
+                                                    
+                                                    {/* Renovation */}
+                                                    <td className={getCellClass(row, 'renovation')}>{isEditable ? <EditableCell value={row.renovation} onChange={(val) => handleUpdate(row.id, { renovation: val })} type="checkbox" /> : (row.renovation && row.renovation.includes('V') ? <div className="inline-flex justify-center items-center w-6 h-6 rounded-full bg-purple-100 text-purple-600"><Icons.Hammer className="w-4 h-4" /></div> : <span>-</span>)}</td>
+                                                    
+                                                    {/* Scrubber */}
+                                                    <td className={getCellClass(row, 'scrubber')}>{isEditable ? <EditableCell value={row.scrubber} onChange={(val) => handleUpdate(row.id, { scrubber: val })} type="checkbox" /> : (row.scrubber && row.scrubber.includes('V') ? <div className="inline-flex justify-center items-center w-6 h-6 rounded-full bg-orange-100 text-orange-600"><Icons.Wind className="w-4 h-4" /></div> : <span>-</span>)}</td>
+                                                    
+                                                    {/* LOGO */}
+                                                    <td className={getCellClass(row, 'logo')}>{isEditable ? <EditableCell value={row.logo} onChange={(val) => handleUpdate(row.id, { logo: val })} type="checkbox" /> : (row.logo && row.logo.includes('V') ? <div className="inline-flex justify-center items-center w-6 h-6 rounded-full bg-blue-100 text-blue-600"><Icons.Anchor className="w-4 h-4" /></div> : <span>-</span>)}</td>
+                                                    
+                                                    {/* Remark */}
+                                                    <td className={`px-4 py-3 text-sm text-slate-500 ${getChangeClass(row, 'remark')}`}><EditableCell value={row.remark} onChange={(val) => handleUpdate(row.id, { remark: val })} /></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {filteredData.map((row, index) => (
+                                    <div key={row.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div><h3 className="font-bold text-lg">{row.name} {row.chName}</h3><span className="text-sm text-slate-500">{row.pic}</span></div>
+                                            <span className="text-4xl font-black text-slate-100">{index + 1}</span>
+                                        </div>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between"><span className="text-slate-500">船廠</span> <span className="font-bold text-blue-600">{row.factory}</span></div>
+                                            <div className="flex justify-between"><span className="text-slate-500">修期</span> <span>{row.rangeStart} ~ {row.rangeEnd}</span></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </main>
+
+                    {/* Password Modal */}
+                    {showPasswordModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+                            <form onSubmit={handlePasswordSubmit} className="bg-white p-6 rounded-xl shadow-2xl w-80">
+                                <h3 className="text-lg font-bold mb-4">請輸入管理員密碼</h3>
+                                <input
+                                    type="password"
+                                    className="w-full border border-slate-300 rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={passwordInput}
+                                    onChange={(e) => setPasswordInput(e.target.value)}
+                                    autoFocus
+                                />
+                                <div className="flex gap-2 justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowPasswordModal(false); setPasswordInput(''); }}
+                                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded"
+                                    >
+                                        取消
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                    >
+                                        確認
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
