@@ -3,685 +3,764 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 年度船舶塢修總表 (Final V9)</title>
+    <title>2026 年度船舶塢修總表 (Live)</title>
     
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel for JSX transformation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, collection, doc, onSnapshot, updateDoc, writeBatch, query, orderBy, getDocs, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        
-        window.firebaseModules = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, collection, doc, onSnapshot, updateDoc, writeBatch, query, orderBy, getDocs, setDoc };
+    <!-- Import Map for Modules -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
+            "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"
+        }
+    }
     </script>
 
     <style>
-        body { font-size: 14px; }
-        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        /* Hide scrollbar for cleaner look if needed */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        td { vertical-align: middle; }
-        
-        /* 日期輸入框樣式 */
-        input[type="date"] { 
-            background-color: transparent; 
-            font-family: monospace; 
-            color: inherit; 
-            font-weight: inherit; 
-            font-size: inherit;
-            border: 1px solid transparent;
-            border-radius: 4px;
-            padding: 2px;
-        }
-        input[type="date"]:hover { border-color: #cbd5e1; }
-        input[type="date"]:focus { border-color: #3b82f6; outline: none; background-color: white; }
-
-        /* 變更提醒專用樣式: 亮黃底 + 紅色粗體 */
-        .changed-cell { 
-            background-color: #fef08a !important; 
-            color: #dc2626 !important;           
-            font-weight: 900 !important;         
-        }
-        /* 確保內部元素繼承樣式 */
-        .changed-cell input, 
-        .changed-cell select, 
-        .changed-cell span, 
-        .changed-cell div { 
-            color: #dc2626 !important; 
-            font-weight: 900 !important;
-        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans">
-    
-    <!-- ★★★ Firebase Config ★★★ -->
-    <script>
-        window.USER_FIREBASE_CONFIG = {
-         apiKey: "AIzaSyA0K7YyHq-BBNqZos_i8gy-GPgARroASkY",
-         authDomain: "dry-dock-schedule-5cff2.firebaseapp.com",
-         projectId: "dry-dock-schedule-5cff2",
-         storageBucket: "dry-dock-schedule-5cff2.firebasestorage.app",
-         messagingSenderId: "690533057804",
-         appId: "1:690533057804:web:5e809384e278ee49e37529",
-         measurementId: "G-FQPPJEDE04"
-        };
-    </script>
-
-    <!-- ★★★ 原始資料 (37筆正確版) ★★★ -->
-    <script id="default-csv-data" type="text/csv">
-NO.,NAME,船名,Docking Due,Survey,修期,PIC,AUD,Start,To,End,Duration,Unit,Factory,Renovation,Scrubber,LOGO,REMARK
-1,WH326,璀春,2026/3/4,1.特檢,28,姚洪香,V,2026/1/1,~,2026/1/28,28,days,廣東中遠,V,V,V,5/8:企劃 配合2026春節調整修期.
-2,WH176,卓春,2026/3/25,2.特檢,17,張簡志鈞,V,2026/1/12,~,2026/2/6,26,days,蛇口友聯,,V,V,
-3,WH611,冠春,2026/3/16,5.特檢,33,鄧健雄,V,2026/2/25,~,2026/3/29,33,days, 青島北海,,,V,2025/11/10變更修期2026/2/18+40天
-4,WH627,絳春,2026/4/23,4.特檢,24,蕭應龍,V,2026/2/25,~,2026/3/20,24,days,華潤大東,,,V,2025/11/10變更修期2026/2/18+30天
-5,WH516,新春,2026/3/28,3.中檢,26,周 進,V,2026/2/25,~,2026/3/12,16,days,廣東中遠,V,,V,
-6,WH327,璨春,2026/3/25,1.特檢,28,蕭應龍,N,2026/2/27,~,2026/3/26,28,days,廣東中遠,V,V,V,5/8:企劃 配合2026春節調整修期.
-7,WH278,逸春,2026/4/7,1.特檢,26,陳國勝,V,2026/2/28,~,2026/3/13,14,days,文沖,,,V,
-8,WH285,桂春,2026/4/30,1.特檢,26,台東潤,V,2026/3/15,~,2026/3/28,14,days,文沖,V,,V,
-9,WH517,局春,2026/6/1,3.中檢,26,劉建國,V,2026/3/24,~,2026/4/8,16,days,青島北海,V,,V,2025/11/10變更修期2026/2/18+33天
-10,WH313,富春,2026/4/20,4.特檢,24,劉外生,V,2026/3/26,~,2026/4/18,24,days,廣東中遠,,,V,313/315其中一船做X7防污漆
-11,WH328,亮春,2026/5/13,1.特檢,28,丁招勇,M,2026/4/3,~,2026/4/16,14,days,廣東中遠,V,,V,5/8:企劃 配合2026春節調整修期.
-12,WH286,騰春,2026/5/15,1.特檢,26,劉外生,V,2026/4/5,~,2026/4/18,14,days,廣東中遠,V,,V,
-13,WH329,麗春,2026/5/27,1.特檢,28,陳敏薇,V,2026/4/20,~,2026/5/3,14,days,廣東中遠,V,,V,5/8:企劃 配合2026春節調整修期.
-14,WH287,芳春,2026/7/5,1.特檢,26,藍志達,V,2026/4/22,~,2026/5/5,14,days,廣東中遠,V,,V,
-15,WH288,源春,2026/8/1,1.特檢,26,黃怡仁,V,2026/5/16,~,2026/5/29,14,days,廣東中遠,V,,V,
-16,WH289,昌春,2026/9/29,1.特檢,26,盛利寧,N,2026/7/1,~,2026/7/14,14,days,文沖,V,,V,
-17,WH315,貴春,2026/9/15,4.特檢,24,周 進,V,2026/7/3,~,2026/7/26,24,days,廣東中遠,,,V,313/315其中一船做X7防污漆
-18,WH626,紫春,2026/9/5,4.特檢,24,卓錦成,V,2026/7/15,~,2026/8/7,24,days,舟山中遠,,,V,
-19,WH276,越春,2026/9/11,2.中檢,26,陳國勝,V,2026/7/29,~,2026/8/11,14,days,文沖,,,V,
-20,WH612,群春,2026/9/24,5.特檢,33,劉哲宇,V,2026/8/12,~,2026/9/13,33,days,華豐,,,V,
-21,WH271,百春,2026/10/13,3.特檢,26,鄧健雄,V,2026/8/15,~,2026/9/4,21,days,蛇口友聯,V,,V,
-22,WH613,倫春,2026/9/27,5.特檢,33,陳啟豪,V,2026/8/23,~,2026/9/24,33,days,浙江友聯,,,V,
-23,WHV01,雍春,2026/10/14,2.中檢,30,羅國治,M,2026/9/15,~,2026/10/14,30,days,浙江友聯,,V,V,
-24,WH290,安春,2026/10/28,1.特檢,26,周 進,V,2026/9/25,~,2026/10/8,14,days,廣東中遠,V,,V,
-25,WH272,年春,2026/12/15,3.特檢,26,林修宇,V,2026/10/10,~,2026/10/30,21,days,蛇口友聯,V,,V,
-26,WH291,穩春,2026/12/19,1.特檢,26,陳啟豪,V,2026/11/11,~,2026/11/24,14,days,廣東中遠,V,,V,
-27,WH292,承春,2027/2/22,1.特檢,26,陳家和,V,2026/11/28,~,2026/12/11,14,days,廣東中遠,V,,V,
-28,WH625,和春,2027/3/17,5.中檢,31,張簡志鈞,V,2026/12/17,~,2027/3/17,31,days,舟山中遠,,,V,
-29,WH273,基春,2027/2/14,3.特檢,26,陳逸銘,M,2026/12/19,~,2027/1/8,21,days,蛇口友聯,,,V,
-30,WH171,興春,2027/3/12,4.中檢,26,丁招勇,N,2027/1/14,~,2027/2/3,21,days,廣東中遠,V,,V,
-31,WH293,恩春,2027/3/30,1.特檢,26,劉哲宇,V,2027/2/20,~,2027/3/5,14,days,廣東中遠,V,,V,
-32,WH172,運春,2027/4/18,4.中檢,26,陳家和,V,2027/3/15,~,2027/4/4,21,days,蛇口友聯,V,,V,
-33,WH721,誠春,2027/4/24,4.中檢,30,陳邦偉,,2027/2/11,~,2027/3/12,30,days,浙江友聯,V,V,V,
-34,WH722,信春,2027/5/3,4.中檢,30,藍志達,,2027/2/11,~,2027/3/12,30,days,青島北海,V,V,V,
-35,WH522,瑞春,2027/5/8,4.中檢,26,黃怡仁,,2027/2/22,~,2027/3/17,24,days,青島北海,,,V,
-36,WH621,麟春,2027/5/24,4.中檢,23,藍志達,,2027/3/24,~,2027/4/15,23,days,青島北海,,,V,
-37,WH723,隆春,2027/5/29,4.中檢,30,鄧健雄,,2027/4/8,~,2027/5/7,30,days,青島北海,V,V,V,
-    </script>
+<body class="bg-slate-50 text-slate-800">
 
     <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useMemo, useRef, useEffect } = React;
-        
-        // --- Helper Components defined BEFORE App ---
-        const Icon = ({ path, className }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                {path}
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { initializeApp } from 'firebase/app';
+        import { 
+          getFirestore, 
+          collection, 
+          onSnapshot, 
+          doc, 
+          updateDoc, 
+          setDoc,
+          query
+        } from 'firebase/firestore';
+        import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+
+        // --- Icons (Replaced lucide-react with inline SVGs for standalone HTML) ---
+        const IconBase = ({ size = 24, color = "currentColor", children, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                {children}
             </svg>
         );
-        
-        const Icons = {
-            Search: (props) => <Icon {...props} path={<><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>} />,
-            Filter: (props) => <Icon {...props} path={<><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>} />,
-            Ship: (props) => <Icon {...props} path={<><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.9 5.8 2.8 8"/><path d="M15 10l-3-8-3 8"/></>} />, 
-            Anchor: (props) => <Icon {...props} path={<><circle cx="12" cy="5" r="3"/><line x1="12" x2="12" y1="22" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></>} />,
-            LayoutGrid: (props) => <Icon {...props} path={<><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></>} />,
-            List: (props) => <Icon {...props} path={<><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></>} />,
-            Download: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>} />,
-            Settings: (props) => <Icon {...props} path={<><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></>} />,
-            User: (props) => <Icon {...props} path={<><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>} />,
-            Info: (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></>} />,
-            Lock: (props) => <Icon {...props} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>} />,
-            Unlock: (props) => <Icon {...props} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>} />,
-            Hammer: (props) => <Icon {...props} path={<><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9"/><path d="M17.64 15 22 10.64"/><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V7.86c0-.55-.45-1-1-1H14c-.55 0-1 .45-1 1v3.8c0 .85-.33 1.65-.93 2.25L10.82 15"/></>} />,
-            Wind: (props) => <Icon {...props} path={<><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></>} />,
-            Trash: (props) => <Icon {...props} path={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>} />,
-            Save: (props) => <Icon {...props} path={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>} />,
-            Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></>} />,
-            RefreshCw: (props) => <Icon {...props} path={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>} />,
+
+        const Lock = (props) => <IconBase {...props}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconBase>;
+        const Unlock = (props) => <IconBase {...props}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></IconBase>;
+        const Anchor = (props) => <IconBase {...props}><circle cx="12" cy="5" r="3"/><line x1="12" x2="12" y1="22" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></IconBase>;
+        const RotateCcw = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
+        const X = (props) => <IconBase {...props}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
+        const Info = (props) => <IconBase {...props}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></IconBase>;
+        const Hammer = (props) => <IconBase {...props}><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9"/><path d="M17.64 15 22 10.64"/><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V7.86c0-.55-.45-1-1-1H14c-.55 0-1 .45-1 1v3.8c0 .85-.33 1.65-.93 2.25L10.82 15"/></IconBase>;
+        const Wind = (props) => <IconBase {...props}><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></IconBase>;
+        const Ship = (props) => <IconBase {...props}><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.9 5.8 2.8 8"/><path d="M15 10l-3-8-3 8"/></IconBase>;
+        const Edit3 = (props) => <IconBase {...props}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></IconBase>;
+        const Filter = (props) => <IconBase {...props}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></IconBase>;
+
+        // --- (1) Firebase Configuration ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyA0K7YyHq-BBNqZos_i8gy-GPgARroASkY",
+          authDomain: "dry-dock-schedule-5cff2.firebaseapp.com",
+          projectId: "dry-dock-schedule-5cff2",
+          storageBucket: "dry-dock-schedule-5cff2.firebasestorage.app",
+          messagingSenderId: "690533057804",
+          appId: "1:690533057804:web:5e809384e278ee49e37529",
+          measurementId: "G-FQPPJEDE04"
+};
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Shipyard Options
+        const SHIPYARDS = [
+          "廣東中遠",
+          "蛇口友聯",
+          "青島北海",
+          "華潤大東",
+          "文沖",
+          "浙江友聯",
+          "舟山中遠",
+          "TBD (待定)"
+        ];
+
+        // --- Raw CSV Data (Seeding) ---
+        // Note: Using template literal for multiline string
+        const RAW_CSV_DATA = `NO.,NAME,船名,Docking Due,Survey,修期,PIC,AUD,SD預排入塢計畫,,,,,船廠,生活區裝修,scrubber加裝,LOGO,REMARK
+1,WH326,璀春,2026/3/4,1.特檢,28,姚洪香,V,2026/1/1,~,2026/1/28,28,days,廣東中遠,V,V,V,5/8:企劃 配合2026春節調整修期.
+2,WH176,卓春,2026/3/25,2.特檢,26,張簡志鈞,V,2026/1/12,~,2026/2/6,26,days,蛇口友聯,,V,V,
+3,WH611,冠春,2026/3/16,5.特檢,33,鄧健雄,V,2026/2/25,~,2026/3/29,33,days,青島北海,,,V,2025/11/10變更修期2026/2/18+40天
+4,WH627,絳春,2026/4/23,4.特檢,24,蕭應龍,V,2026/2/25,~,2026/3/20,24,days,華潤大東,,,V,2025/11/10變更修期2026/2/18+30天
+5,WH516,新春,2026/3/28,3.中檢,16,周 進,V,2026/2/25,~,2026/3/12,16,days,廣東中遠,V,,V,
+6,WH327,璨春,2026/3/25,1.特檢,28,蕭應龍,N,2026/2/27,~,2026/3/26,28,days,廣東中遠,V,V,V,5/8:企劃 配合2026春節調整修期.
+7,WH278,逸春,2026/4/7,1.特檢,14,陳國勝,V,2026/2/28,~,2026/3/13,14,days,文沖,,,V,
+8,WH612,群春,2026/9/24,5.特檢,33,劉哲宇,V,2026/3/9,~,2026/4/10,33,days,青島北海,,,V,12/31:企劃變更進廠日.
+9,WH285,桂春,2026/4/30,1.特檢,14,台東潤,V,2026/3/15,~,2026/3/28,14,days,文沖,V,,V,
+10,WH517,局春,2026/6/1,3.中檢,16,劉建國,V,2026/3/24,~,2026/4/8,16,days,青島北海,V,,V,2025/11/10變更修期2026/2/18+33天
+11,WH313,富春,2026/4/20,4.特檢,24,劉外生,V,2026/3/26,~,2026/4/18,24,days,廣東中遠,,,V,313/315其中一船做X7防污漆
+12,WH328,亮春,2026/5/13,1.特檢,14,丁招勇,M,2026/4/3,~,2026/4/16,14,days,廣東中遠,V,,V,5/8:企劃 配合2026春節調整修期.
+13,WH286,騰春,2026/5/15,1.特檢,14,劉外生,V,2026/4/5,~,2026/4/18,14,days,廣東中遠,V,,V,
+14,WH329,麗春,2026/5/27,1.特檢,14,陳敏薇,V,2026/4/20,~,2026/5/3,14,days,廣東中遠,V,,V,5/8:企劃 配合2026春節調整修期.
+15,WH287,芳春,2026/7/5,1.特檢,14,藍志達,V,2026/4/22,~,2026/5/5,14,days,廣東中遠,V,,V,
+16,WH288,源春,2026/8/1,1.特檢,14,黃怡仁,V,2026/5/16,~,2026/5/29,14,days,廣東中遠,V,,V,
+17,WH613,倫春,2026/9/27,5.特檢,33,陳啟豪,V,2026/5/28,~,2026/6/29,33,days,浙江友聯,,,V,12/31:企劃變更進廠日.
+18,WH289,昌春,2026/9/29,1.特檢,14,盛利寧,N,2026/7/1,~,2026/7/14,14,days,文沖,V,,V,
+19,WH315,貴春,2026/9/15,4.特檢,24,周 進,V,2026/7/3,~,2026/7/26,24,days,廣東中遠,,,V,313/315其中一船做X7防污漆
+20,WH626,紫春,2026/9/5,4.特檢,24,卓錦成,V,2026/7/15,~,2026/8/7,24,days,舟山中遠,,,V,
+21,WH276,越春,2026/9/11,2.中檢,14,陳國勝,V,2026/7/29,~,2026/8/11,14,days,文沖,,,V,
+22,WH271,百春,2026/10/13,3.特檢,21,鄧健雄,V,2026/8/15,~,2026/9/4,21,days,蛇口友聯,V,,V,
+23,WHV01,雍春,2026/10/14,2.中檢,30,羅國治,M,2026/9/15,~,2026/10/14,30,days,浙江友聯,,V,V,
+24,WH290,安春,2026/10/28,1.特檢,14,周 進,V,2026/9/25,~,2026/10/8,14,days,廣東中遠,V,,V,
+25,WH272,年春,2026/12/15,3.特檢,21,林修宇,V,2026/10/10,~,2026/10/30,21,days,蛇口友聯,V,,V,
+26,WH291,穩春,2026/12/19,1.特檢,14,陳啟豪,V,2026/11/11,~,2026/11/24,14,days,廣東中遠,V,,V,
+27,WH292,承春,2027/2/22,1.特檢,14,陳家和,V,2026/11/28,~,2026/12/11,14,days,廣東中遠,V,,V,
+28,WH625,和春,2027/3/17,5.中檢,31,張簡志鈞,V,2026/12/4,~,2027/1/3,31,days,舟山中遠,,,V,
+29,WH273,基春,2027/2/14,3.特檢,21,陳逸銘,M,2026/12/19,~,2027/1/8,21,days,蛇口友聯,,,V,
+30,WH171,興春,2027/3/12,4.中檢,21,丁招勇,N,2027/1/14,~,2027/2/3,21,days,廣東中遠,V,,V,
+31,WH293,恩春,2027/3/30,1.特檢,14,劉哲宇,V,2027/2/20,~,2027/3/5,14,days,廣東中遠,V,,V,
+32,WH172,運春,2027/4/18,4.中檢,21,陳家和,V,2027/3/15,~,2027/4/4,21,days,蛇口友聯,V,,V,
+33,WH721,誠春,2027/4/24,4.中檢,30,陳邦偉,,2027/2/11,~,2027/3/12,30,days,浙江友聯,V,V,V,
+34,WH722,信春,2027/5/3,4.中檢,30,藍志達,,2027/2/11,~,2027/3/12,30,days,青島北海,V,V,V,
+35,WH522,瑞春,2027/5/8,4.中檢,24,黃怡仁,,2027/2/22,~,2027/3/17,24,days,青島北海,,,V,
+36,WH621,麟春,2027/5/24,4.中檢,23,藍志達,,2027/3/24,~,2027/4/15,23,days,青島北海,,,V,
+37,WH723,隆春,2027/5/29,4.中檢,30,鄧健雄,,2027/4/8,~,2027/5/7,30,days,青島北海,V,V,V,`;
+
+        // --- Helper Functions ---
+        const parseDate = (dateStr) => {
+          if (!dateStr) return "";
+          const parts = dateStr.trim().split('/');
+          if (parts.length === 3) {
+            const y = parts[0];
+            const m = parts[1].padStart(2, '0');
+            const d = parts[2].padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          }
+          return dateStr; 
         };
 
-        const StatCard = ({ icon, label, value, sub, valueColor = "text-slate-800", bgColor = "bg-white" }) => (
-            <div className={`${bgColor} p-4 rounded-xl shadow border border-slate-200 flex items-center gap-4 transition hover:shadow-md`}>
-                <div className="p-3 bg-white/80 rounded-full shadow-sm">{icon}</div>
-                <div>
-                    <p className="text-sm text-slate-500 font-medium">{label}</p>
-                    <div className="flex items-baseline gap-1">
-                        <span className={`text-3xl font-extrabold ${valueColor}`}>{value}</span>
-                        <span className="text-xs text-slate-400 font-medium">{sub}</span>
-                    </div>
+        const parseCSV = () => {
+          const lines = RAW_CSV_DATA.split('\n').filter(l => l.trim().length > 0);
+          const data = [];
+          for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(',');
+            if (row.length < 5) continue;
+            const no = row[0];
+            const remark = row.slice(17).join(',').replace(/"/g, '');
+            const item = {
+              id: `ship_${no}`,
+              no,
+              vesselName: row[1],
+              chName: row[2],
+              dockDue: row[3],
+              survey: row[4],
+              days: row[5],
+              pic: row[6],
+              plannedPeriodStart: parseDate(row[8]),
+              plannedPeriodEnd: parseDate(row[10]),
+              shipyard: row[13] ? row[13].trim() : "TBD (待定)",
+              renovation: row[14] || "",
+              scrubber: row[15] || "",
+              logo: row[16] || "",
+              remark: remark,
+              original: {
+                plannedPeriodStart: parseDate(row[8]),
+                plannedPeriodEnd: parseDate(row[10]),
+                shipyard: row[13] ? row[13].trim() : "TBD (待定)",
+                renovation: row[14] || "",
+                scrubber: row[15] || "",
+                logo: row[16] || "",
+                remark: remark
+              }
+            };
+            data.push(item);
+          }
+          return data;
+        };
+
+        const SEED_DATA = parseCSV();
+
+        // --- Modal Component ---
+        const PasswordModal = ({ isOpen, onClose, onSuccess }) => {
+          const [password, setPassword] = useState("");
+          const [error, setError] = useState(false);
+
+          if (!isOpen) return null;
+
+          const handleSubmit = (e) => {
+            e.preventDefault();
+            // (3) Changed password to wanhai888
+            if (password === "wanhai888") {
+              onSuccess();
+              onClose();
+              setPassword("");
+              setError(false);
+            } else {
+              setError(true);
+            }
+          };
+
+          return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-lg shadow-xl w-80">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold text-gray-800">輸入管理員密碼</h3>
+                  <button onClick={onClose}><X size={20} className="text-gray-500" /></button>
                 </div>
+                <form onSubmit={handleSubmit}>
+                  <input
+                    type="password"
+                    className="w-full border border-gray-300 p-2 rounded mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="請輸入密碼 (wanhai888)"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoFocus
+                  />
+                  {error && <p className="text-red-500 text-sm mb-2">密碼錯誤，請重試。</p>}
+                  <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors">確認解鎖</button>
+                </form>
+              </div>
             </div>
-        );
+          );
+        };
 
-        const CheckMark = ({ checked }) => (
-            <div className={`inline-flex justify-center items-center w-6 h-6 rounded-full ${checked ? 'bg-slate-100 text-green-600' : 'text-slate-200'}`}>
-                {checked ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg> : <span>-</span>}
+        // --- Stat Card Component ---
+        const StatCard = ({ icon: Icon, label, value, sub, colorClass, bgClass }) => (
+          <div className={`flex items-center gap-4 p-4 rounded-xl shadow-sm border border-slate-100 bg-white`}>
+            <div className={`p-3 rounded-full ${bgClass} ${colorClass}`}>
+              <Icon size={24} />
             </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium mb-1">{label}</p>
+              <div className="flex items-baseline gap-1">
+                <span className={`text-2xl font-extrabold ${colorClass}`}>{value}</span>
+                <span className="text-xs text-slate-400 font-medium">{sub}</span>
+              </div>
+            </div>
+          </div>
         );
 
-        const Badge = ({ text, color }) => (
-            <span className={`px-2 py-0.5 rounded text-xs font-bold ${color}`}>{text}</span>
-        );
-
-        const App = () => {
-            const [scheduleData, setScheduleData] = useState([]);
-            const [searchTerm, setSearchTerm] = useState('');
-            const [selectedFactory, setSelectedFactory] = useState('All');
-            const [selectedPIC, setSelectedPIC] = useState('All');
-            const [selectedRenovation, setSelectedRenovation] = useState('All');
-            const [selectedScrubber, setSelectedScrubber] = useState('All');
-            const [viewMode, setViewMode] = useState('table');
-            const [dataStatus, setDataStatus] = useState('讀取中...');
-            const [isEditable, setIsEditable] = useState(false);
-            const [showPasswordModal, setShowPasswordModal] = useState(false);
-            const [passwordInput, setPasswordInput] = useState('');
-            const [initialDataMap, setInitialDataMap] = useState({}); 
-            const COLLECTION_NAME = 'docking_schedule_2026';
-
-            const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, collection, doc, onSnapshot, updateDoc, writeBatch, getDocs, setDoc } = window.firebaseModules;
-            const [db, setDb] = useState(null);
-            
-            // --- Helper: EditableCell ---
-            const EditableCell = ({ value, onChange, type = "text", options = [] }) => {
-                if (!isEditable) return <span>{value}</span>;
-                if (type === "select") {
-                    return (
-                        <select className="bg-white border border-blue-300 rounded px-1 py-0.5 text-sm w-full" value={value} onChange={(e) => onChange(e.target.value)}>
-                            {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
-                    );
-                }
-                if (type === "checkbox") {
-                    const isChecked = value && value.toUpperCase().includes('V');
-                    return (
-                        <input type="checkbox" checked={isChecked} onChange={(e) => onChange(e.target.checked ? 'V' : '')} className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" />
-                    );
-                }
-                return <input type="text" className="bg-white border border-blue-300 rounded px-2 py-1 text-sm w-full" value={value} onChange={(e) => onChange(e.target.value)} />;
-            };
-
-            // 1. 初始化
-            useEffect(() => {
-                // 建立原始資料對照表
-                const embeddedCsv = document.getElementById('default-csv-data');
-                if (embeddedCsv) {
-                    const rows = parseCSV(embeddedCsv.textContent.trim());
-                    const map = {};
-                    rows.forEach(r => { map[r.no] = r; });
-                    setInitialDataMap(map);
-                }
-
-                const initFirebase = async () => {
-                    try {
-                        let configObj = window.USER_FIREBASE_CONFIG;
-                        const app = initializeApp(configObj);
-                        const authInstance = getAuth(app);
-                        const dbInstance = getFirestore(app);
-                        setDb(dbInstance);
-                        
-                        signInAnonymously(authInstance).catch(e => {
-                            console.error("Auth failed", e);
-                        });
-                    } catch (e) {
-                        console.error("Firebase init failed", e);
-                    }
-                };
-                initFirebase();
-            }, []);
-
-            // 2. 連線後監聽資料
-            useEffect(() => {
-                if (!db) return;
-
-                const q = collection(db, COLLECTION_NAME);
-                const unsubscribe = onSnapshot(q, async (snapshot) => {
-                    if (snapshot.empty) {
-                        // 資料庫為空，執行初始化
-                        await initializeDatabase();
-                    } else {
-                        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        const sortedDocs = sortDataByDate(docs);
-                        setScheduleData(sortedDocs);
-                        setDataStatus('已連線 (雲端同步)');
-                    }
-                }, (error) => {
-                    console.error("Firestore error:", error);
-                    if (error.code === 'permission-denied') {
-                         setDataStatus('權限不足 (請檢查 Rules)');
-                    } else {
-                         setDataStatus('連線錯誤');
-                    }
-                });
-
-                return () => unsubscribe();
-            }, [db]);
-
-            const initializeDatabase = async () => {
-                if (!db) return; 
-                setDataStatus('初始化中...');
-                try {
-                    const embeddedCsv = document.getElementById('default-csv-data');
-                    const rows = parseCSV(embeddedCsv.textContent.trim());
-                    const batch = writeBatch(db);
-                    
-                    rows.forEach((row) => {
-                        const docRef = doc(collection(db, COLLECTION_NAME), String(row.no));
-                        batch.set(docRef, row);
-                    });
-                    
-                    await batch.commit();
-                } catch (error) {
-                    console.error("Init failed:", error);
-                    setDataStatus('初始化失敗');
-                }
-            };
-
-            // --- Helpers ---
-            const sortDataByDate = (data) => {
-                return [...data].sort((a, b) => {
-                    const dateA = new Date(formatToISO(a.rangeStart));
-                    const dateB = new Date(formatToISO(b.rangeStart));
-                    if (isNaN(dateA)) return 1;
-                    if (isNaN(dateB)) return -1;
-                    return dateA - dateB;
-                });
-            };
-
-            const formatToISO = (dateStr) => {
-                if (!dateStr) return '';
-                const parts = dateStr.split('/');
-                if (parts.length !== 3) return '';
-                const y = parts[0];
-                const m = parts[1].padStart(2, '0');
-                const d = parts[2].padStart(2, '0');
-                return `${y}-${m}-${d}`;
-            };
-
-            const formatFromISO = (isoDate) => {
-                if (!isoDate) return '';
-                const parts = isoDate.split('-');
-                if (parts.length !== 3) return '';
-                return `${parts[0]}/${parseInt(parts[1])}/${parseInt(parts[2])}`;
-            };
-
-            const parseCSV = (csvText) => {
-                const lines = csvText.split(/\r\n|\n/).map(l => l.trim()).filter(l => l);
-                const headerRowIndex = 0; 
-                const headers = lines[headerRowIndex].split(',').map(h => h.trim().toUpperCase());
-                const colMap = {};
-                headers.forEach((h, i) => {
-                    colMap[h] = i;
-                    if (h.includes('船名')) colMap['CHNAME'] = i;
-                    if (h.includes('船廠') || h.includes('FACTORY')) colMap['FACTORY'] = i;
-                    if (h.includes('生活區') || h.includes('RENOVATION')) colMap['RENOVATION'] = i;
-                    if (h.includes('SCRUBBER')) colMap['SCRUBBER'] = i;
-                    if (h.includes('LOGO')) colMap['LOGO'] = i;
-                    if (h.includes('REMARK')) colMap['REMARK'] = i;
-                    if (h.includes('PIC')) colMap['PIC'] = i;
-                    if (h.includes('DOCKING DUE')) colMap['DOCKDUE'] = i;
-                    if (h.includes('SURVEY')) colMap['SURVEY'] = i;
-                    if (h.includes('修期') || h.includes('DURATION')) colMap['DAYS'] = i;
-                    if (h.includes('START') || h.includes('SD')) colMap['START'] = i;
-                    if (h.includes('END')) colMap['END'] = i;
-                });
-
-                const data = [];
-                for (let i = headerRowIndex + 1; i < lines.length; i++) {
-                    const row = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, '').replace(/'/g, ''));
-                    if (row.length < 5) continue;
-                    let rangeStart = row[colMap['START'] || 8] || '';
-                    let rangeEnd = row[colMap['END'] || 10] || '';
-                    data.push({
-                        no: row[colMap['NO'] || 0] || '', 
-                        name: row[colMap['NAME'] || 1] || '',
-                        chName: row[colMap['CHNAME'] || 2] || '',
-                        dockDue: row[colMap['DOCKDUE'] || 3] || '',
-                        survey: row[colMap['SURVEY'] || 4] || '',
-                        pic: row[colMap['PIC'] || 6] || '',
-                        factory: row[colMap['FACTORY'] || 13] || 'TBD',
-                        days: row[colMap['DAYS'] || 5] || '',
-                        rangeStart: rangeStart,
-                        rangeEnd: rangeEnd,
-                        renovation: row[colMap['RENOVATION'] || 14] || '',
-                        scrubber: row[colMap['SCRUBBER'] || 15] || '',
-                        logo: row[colMap['LOGO'] || 16] || '',
-                        remark: row[colMap['REMARK'] || 17] || ''
-                    });
-                }
-                return data;
-            };
-
-            const handleUpdate = async (id, updates) => {
-                if (!db || !isEditable) return;
-                try {
-                    const docRef = doc(db, COLLECTION_NAME, id);
-                    await updateDoc(docRef, updates);
-                } catch (e) {
-                    console.error("Update failed", e);
-                }
-            };
-
-            const handleDateChange = (id, field, newVal) => {
-                // 1. Get current row data
-                const currentRow = scheduleData.find(r => r.id === id);
-                if (!currentRow) return;
-
-                const formattedNewVal = formatFromISO(newVal);
-                
-                // 2. Calculate new duration
-                let startStr = field === 'rangeStart' ? formattedNewVal : currentRow.rangeStart;
-                let endStr = field === 'rangeEnd' ? formattedNewVal : currentRow.rangeEnd;
-                
-                let updates = { [field]: formattedNewVal };
-
-                // 自動計算天數
-                if (startStr && endStr) {
-                    const startDate = new Date(formatToISO(startStr));
-                    const endDate = new Date(formatToISO(endStr));
-                    
-                    if (!isNaN(startDate) && !isNaN(endDate)) {
-                         const diffTime = endDate - startDate;
-                         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                         if (diffDays > 0) {
-                             updates.days = diffDays.toString();
-                         }
-                    }
-                }
-
-                // 3. Update Firestore
-                handleUpdate(id, updates);
-            };
-
-            const toggleEditMode = () => {
-                if (isEditable) {
-                    setIsEditable(false);
-                } else {
-                    setShowPasswordModal(true);
-                }
-            };
-            
-            const handlePasswordSubmit = (e) => {
-                e.preventDefault();
-                if (passwordInput === "wanhai168") {
-                    setIsEditable(true);
-                    setShowPasswordModal(false);
-                    setPasswordInput('');
-                } else {
-                    alert("密碼錯誤");
-                    setPasswordInput('');
-                }
-            };
-
-            const handleExport = () => {
-                const headers = ['NO.', 'NAME', '船名', 'Docking Due', 'Survey', '修期', 'PIC', 'Start', 'End', '船廠', '生活區裝修', 'scrubber加裝', 'LOGO', 'REMARK'];
-                const csvContent = [
-                    headers.join(','),
-                    ...scheduleData.map((row, index) => [
-                        index + 1,
-                        row.name, row.chName, row.dockDue, row.survey, row.days, row.pic, 
-                        row.rangeStart, row.rangeEnd,
-                        row.factory, row.renovation, row.scrubber, row.logo, `"${row.remark}"`
-                    ].join(','))
-                ].join('\n');
-                const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' }); 
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.setAttribute('download', `docking_schedule_2026_${new Date().toISOString().slice(0,10)}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            };
-
-            const factories = useMemo(() => ['All', ...new Set(scheduleData.map(item => item.factory).filter(Boolean))], [scheduleData]);
-            const pics = useMemo(() => ['All', ...new Set(scheduleData.map(item => item.pic).filter(Boolean))], [scheduleData]);
-
-            const filteredData = useMemo(() => {
-                return scheduleData.filter(item => {
-                    const matchesSearch = 
-                        (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                        (item.chName && item.chName.includes(searchTerm)) ||
-                        (item.pic && item.pic.includes(searchTerm));
-                    const matchesFactory = selectedFactory === 'All' || item.factory === selectedFactory;
-                    const matchesPIC = selectedPIC === 'All' || item.pic === selectedPIC;
-                    const hasRenovation = item.renovation && item.renovation.toUpperCase().includes('V');
-                    const matchesRenovation = selectedRenovation === 'All' || (selectedRenovation === 'Yes' && hasRenovation);
-                    const hasScrubber = item.scrubber && item.scrubber.toUpperCase().includes('V');
-                    const matchesScrubber = selectedScrubber === 'All' || (selectedScrubber === 'Yes' && hasScrubber);
-                    return matchesSearch && matchesFactory && matchesPIC && matchesRenovation && matchesScrubber;
-                });
-            }, [scheduleData, searchTerm, selectedFactory, selectedPIC, selectedRenovation, selectedScrubber]);
-
-            const stats = useMemo(() => {
-                const totalShips = filteredData.length;
-                const logoCount = totalShips; 
-                const renovationCount = filteredData.filter(i => i.renovation && i.renovation.toUpperCase().includes('V')).length;
-                const scrubberCount = filteredData.filter(i => i.scrubber && i.scrubber.toUpperCase().includes('V')).length;
-                return { totalShips, logoCount, renovationCount, scrubberCount };
-            }, [filteredData]);
-
-            // 比對樣式 Helper
-            const getCellClass = (row, field) => {
-                const originalRow = initialDataMap[row.no];
-                const baseClass = "px-4 py-3";
-                const centerClass = "px-4 py-3 text-center";
-                
-                if (!originalRow) return baseClass;
-                let isChanged = false;
-                
-                if (field === 'range') {
-                    if (row.rangeStart !== originalRow.rangeStart || row.rangeEnd !== originalRow.rangeEnd) {
-                        isChanged = true;
-                    }
-                } else {
-                    if ((row[field] || '').trim() !== (originalRow[field] || '').trim()) {
-                        isChanged = true;
-                    }
-                }
-
-                if (isChanged) return `${centerClass} changed-cell`;
-                return centerClass;
-            };
-            
-            const getChangeClass = (row, field) => {
-                const originalRow = initialDataMap[row.no];
-                 if (!originalRow) return "";
-                 if ((row[field] || '').trim() !== (originalRow[field] || '').trim()) return "changed-cell";
-                 return "";
-            };
-
-            const getSurveyClass = (survey) => {
-                if (!survey) return "text-slate-600 bg-yellow-50/30";
-                if (survey.includes("特檢")) return "text-red-600 font-bold";
-                if (survey.includes("中檢")) return "text-blue-600 font-bold";
-                return "text-slate-600 bg-yellow-50/30";
-            };
-
+        // --- Table Icon Cell Component (With Edit Toggle) ---
+        const FeatureCell = ({ active, icon: Icon, colorClass, isLocked, onClick }) => {
+          const isActive = active === 'V';
+          
+          if (isLocked) {
             return (
-                <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
-                    <nav className="bg-slate-800 text-white p-4 shadow-lg sticky top-0 z-50">
-                        <div className="max-w-full px-4 mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-                            <div className="flex items-center gap-3">
-                                <Icons.Anchor className="h-6 w-6 text-blue-400" />
-                                <div className="flex flex-col">
-                                    <h1 className="text-xl font-bold tracking-wide">2026 年度船舶塢修總表</h1>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-slate-400 font-mono">狀態: {dataStatus}</span>
-                                        {isEditable && <span className="text-[10px] bg-red-600 text-white px-1.5 rounded animate-pulse">編輯模式</span>}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 text-sm">
-                                <button onClick={toggleEditMode} className={`flex items-center gap-2 px-3 py-1.5 rounded transition font-bold shadow-sm ${isEditable ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'}`}>
-                                    {isEditable ? <Icons.Unlock className="w-4 h-4" /> : <Icons.Lock className="w-4 h-4" />}
-                                    {isEditable ? '結束編輯' : '解鎖編輯'}
-                                </button>
-                                <button onClick={handleExport} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded transition font-bold shadow-sm hover:shadow">
-                                    <Icons.Download className="w-4 h-4" /> 匯出 CSV
-                                </button>
-                            </div>
-                        </div>
-                    </nav>
-
-                    <main className="max-w-full px-4 mx-auto p-4 md:p-6 space-y-6">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <StatCard icon={<Icons.Ship className="text-blue-600 w-6 h-6" />} label="計畫修船數" value={stats.totalShips} sub="艘" valueColor="text-blue-700" bgColor="bg-blue-50" />
-                            <StatCard icon={<Icons.Anchor className="text-emerald-600 w-6 h-6" />} label="換新 LOGO" value={stats.logoCount} sub="艘" valueColor="text-emerald-700" bgColor="bg-emerald-50" />
-                            <StatCard icon={<Icons.LayoutGrid className="text-purple-600 w-6 h-6" />} label="生活區裝修" value={stats.renovationCount} sub="艘" valueColor="text-purple-700" bgColor="bg-purple-50" />
-                            <StatCard icon={<Icons.Filter className="text-orange-600 w-6 h-6" />} label="加裝 Scrubber" value={stats.scrubberCount} sub="艘" valueColor="text-orange-700" bgColor="bg-orange-50" />
-                        </div>
-
-                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col xl:flex-row gap-4 justify-between items-center">
-                            <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-wrap">
-                                <div className="relative group w-full md:w-auto">
-                                    <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                    <input type="text" placeholder="搜尋..." className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg w-full md:w-48 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                                </div>
-                                <select className="pl-2 pr-8 py-2 border border-slate-200 rounded-lg w-full md:w-40 bg-white text-sm" value={selectedFactory} onChange={(e) => setSelectedFactory(e.target.value)}>
-                                    {factories.map(f => <option key={f} value={f}>{f === 'All' ? '所有船廠' : f}</option>)}
-                                </select>
-                                <select className="pl-2 pr-8 py-2 border border-slate-200 rounded-lg w-full md:w-32 bg-white text-sm" value={selectedPIC} onChange={(e) => setSelectedPIC(e.target.value)}>
-                                    {pics.map(p => <option key={p} value={p}>{p === 'All' ? '所有 PIC' : p}</option>)}
-                                </select>
-                                <select className="pl-2 pr-8 py-2 border border-slate-200 rounded-lg w-full md:w-32 bg-white text-sm" value={selectedRenovation} onChange={(e) => setSelectedRenovation(e.target.value)}>
-                                    <option value="All">生活區(全)</option>
-                                    <option value="Yes">有裝修</option>
-                                </select>
-                                <select className="pl-2 pr-8 py-2 border border-slate-200 rounded-lg w-full md:w-32 bg-white text-sm" value={selectedScrubber} onChange={(e) => setSelectedScrubber(e.target.value)}>
-                                    <option value="All">Scrubber(全)</option>
-                                    <option value="Yes">有加裝</option>
-                                </select>
-                            </div>
-                            <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
-                                <button onClick={() => setViewMode('table')} className={`p-2 rounded ${viewMode === 'table' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}><Icons.List className="h-5 w-5" /></button>
-                                <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}><Icons.LayoutGrid className="h-5 w-5" /></button>
-                            </div>
-                        </div>
-
-                        {viewMode === 'table' ? (
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 uppercase tracking-wider">
-                                            <tr>
-                                                <th className="px-4 py-3 whitespace-nowrap w-12 text-center">NO.</th>
-                                                <th className="px-4 py-3 whitespace-nowrap">船名</th>
-                                                <th className="px-4 py-3 whitespace-nowrap">船廠</th>
-                                                <th className="px-4 py-3 whitespace-nowrap">PIC</th>
-                                                <th className="px-4 py-3 whitespace-nowrap">入塢期限</th>
-                                                <th className="px-4 py-3 whitespace-nowrap bg-yellow-50/50">Survey</th>
-                                                <th className="px-4 py-3 whitespace-nowrap min-w-[280px]">預排修期 (Start → End)</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-center">天數</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-center">生活區</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-center">Scrubber</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-center">LOGO</th>
-                                                <th className="px-4 py-3 min-w-[200px]">備註</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {filteredData.map((row, index) => (
-                                                <tr key={row.id} className="hover:bg-blue-50/30 transition duration-150">
-                                                    <td className="px-4 py-3 text-slate-400 font-mono font-bold text-center">{index + 1}</td>
-                                                    <td className="px-4 py-3"><div className="font-bold text-slate-800">{row.name}</div><div className="text-xs text-slate-500">{row.chName}</div></td>
-                                                    
-                                                    {/* Factory */}
-                                                    <td className={`px-4 py-3 ${getChangeClass(row, 'factory')}`}><EditableCell value={row.factory} onChange={(val) => handleUpdate(row.id, { factory: val })} type="select" options={['廣東中遠', '蛇口友聯', '青島北海', '華潤大東', '浙江友聯', '華豐', '文沖', '舟山中遠', 'TBD']} /></td>
-                                                    
-                                                    <td className="px-4 py-3 text-slate-700">{row.pic}</td>
-                                                    <td className="px-4 py-3 text-red-600 font-bold">{row.dockDue}</td>
-                                                    <td className={`px-4 py-3 ${getSurveyClass(row.survey)}`}>{row.survey}</td>
-                                                    
-                                                    {/* Range - Font Size Normal, text-lg */}
-                                                    <td className={getCellClass(row, 'range').replace('text-center', '')}>
-                                                        <div className="flex items-center gap-2">
-                                                            {isEditable ? (
-                                                                <><input type="date" value={formatToISO(row.rangeStart)} onChange={(e) => handleDateChange(row.id, 'rangeStart', e.target.value)} className="w-32 border border-slate-300 rounded px-1 font-normal text-lg"/><span>➜</span><input type="date" value={formatToISO(row.rangeEnd)} onChange={(e) => handleDateChange(row.id, 'rangeEnd', e.target.value)} className="w-32 border border-slate-300 rounded px-1 font-normal text-lg"/></>
-                                                            ) : (
-                                                                <div className="text-slate-700 font-mono text-lg font-normal"><span className="text-slate-800">{row.rangeStart}</span><span className="mx-2 text-slate-400">➜</span><span>{row.rangeEnd}</span></div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    
-                                                    <td className="px-4 py-3 text-center font-bold">{row.days}</td>
-                                                    
-                                                    {/* Renovation */}
-                                                    <td className={getCellClass(row, 'renovation')}>{isEditable ? <EditableCell value={row.renovation} onChange={(val) => handleUpdate(row.id, { renovation: val })} type="checkbox" /> : (row.renovation && row.renovation.includes('V') ? <div className="inline-flex justify-center items-center w-6 h-6 rounded-full bg-purple-100 text-purple-600"><Icons.Hammer className="w-4 h-4" /></div> : <span>-</span>)}</td>
-                                                    
-                                                    {/* Scrubber */}
-                                                    <td className={getCellClass(row, 'scrubber')}>{isEditable ? <EditableCell value={row.scrubber} onChange={(val) => handleUpdate(row.id, { scrubber: val })} type="checkbox" /> : (row.scrubber && row.scrubber.includes('V') ? <div className="inline-flex justify-center items-center w-6 h-6 rounded-full bg-orange-100 text-orange-600"><Icons.Wind className="w-4 h-4" /></div> : <span>-</span>)}</td>
-                                                    
-                                                    {/* LOGO */}
-                                                    <td className={getCellClass(row, 'logo')}>{isEditable ? <EditableCell value={row.logo} onChange={(val) => handleUpdate(row.id, { logo: val })} type="checkbox" /> : (row.logo && row.logo.includes('V') ? <div className="inline-flex justify-center items-center w-6 h-6 rounded-full bg-blue-100 text-blue-600"><Icons.Anchor className="w-4 h-4" /></div> : <span>-</span>)}</td>
-                                                    
-                                                    {/* Remark */}
-                                                    <td className={`px-4 py-3 text-sm text-slate-500 ${getChangeClass(row, 'remark')}`}><EditableCell value={row.remark} onChange={(val) => handleUpdate(row.id, { remark: val })} /></td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {filteredData.map((row, index) => (
-                                    <div key={row.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div><h3 className="font-bold text-lg">{row.name} {row.chName}</h3><span className="text-sm text-slate-500">{row.pic}</span></div>
-                                            <span className="text-4xl font-black text-slate-100">{index + 1}</span>
-                                        </div>
-                                        <div className="space-y-2 text-sm">
-                                            <div className="flex justify-between"><span className="text-slate-500">船廠</span> <span className="font-bold text-blue-600">{row.factory}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">修期</span> <span>{row.rangeStart} ~ {row.rangeEnd}</span></div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </main>
-
-                    {/* Password Modal */}
-                    {showPasswordModal && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
-                            <form onSubmit={handlePasswordSubmit} className="bg-white p-6 rounded-xl shadow-2xl w-80">
-                                <h3 className="text-lg font-bold mb-4">請輸入管理員密碼</h3>
-                                <input
-                                    type="password"
-                                    className="w-full border border-slate-300 rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={passwordInput}
-                                    onChange={(e) => setPasswordInput(e.target.value)}
-                                    autoFocus
-                                />
-                                <div className="flex gap-2 justify-end">
-                                    <button
-                                        type="button"
-                                        onClick={() => { setShowPasswordModal(false); setPasswordInput(''); }}
-                                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded"
-                                    >
-                                        取消
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                                    >
-                                        確認
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    )}
-                </div>
+              <div className="flex justify-center h-8 items-center">
+                {isActive ? <Icon className={colorClass} size={20} strokeWidth={2.5} /> : <span className="text-slate-200">-</span>}
+              </div>
             );
+          }
+
+          // Edit Mode Toggle Button
+          return (
+            <div className="flex justify-center h-8 items-center">
+              <button 
+                onClick={onClick}
+                className={`p-2 rounded-lg transition-all duration-200 border-2 ${
+                  isActive 
+                    ? `bg-white ${colorClass.replace('text-', 'border-')} shadow-sm` 
+                    : 'bg-slate-50 border-slate-200 text-slate-300 hover:border-slate-300'
+                }`}
+                title="點擊切換狀態"
+              >
+                <Icon 
+                  className={isActive ? colorClass : "text-slate-300"} 
+                  size={18} 
+                  strokeWidth={isActive ? 2.5 : 2} 
+                />
+              </button>
+            </div>
+          );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        function DryDockScheduleApp() {
+          const [user, setUser] = useState(null);
+          const [schedules, setSchedules] = useState([]);
+          const [isLocked, setIsLocked] = useState(true);
+          const [showPasswordModal, setShowPasswordModal] = useState(false);
+          const [loading, setLoading] = useState(true);
+          
+          // Filters State
+          const [filterShipyard, setFilterShipyard] = useState('All');
+          const [filterPIC, setFilterPIC] = useState('All');
+          const [filterRenovation, setFilterRenovation] = useState('All');
+          const [filterScrubber, setFilterScrubber] = useState('All');
+
+          useEffect(() => {
+            const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
+              setUser(currentUser);
+              if (!currentUser) signInAnonymously(auth).catch(console.error);
+            });
+            return () => unsubAuth();
+          }, []);
+
+          useEffect(() => {
+            const q = query(collection(db, "dry_dock_schedules"));
+            const unsubscribe = onSnapshot(q, (snapshot) => {
+              let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+              // (1) Filter out legacy demo ships
+              const LEGACY_SHIPS = ["EVER GIVEN", "EVER GREET", "EVER GLOBE"];
+              data = data.filter(item => !LEGACY_SHIPS.includes(item.vesselName));
+
+              // (3) Sorting Logic: Date ASC, then original No
+              data.sort((a, b) => {
+                const dateA = a.plannedPeriodStart || "9999-12-31"; 
+                const dateB = b.plannedPeriodStart || "9999-12-31";
+                
+                if (dateA !== dateB) {
+                  return dateA.localeCompare(dateB);
+                }
+                return (parseInt(a.no) || 0) - (parseInt(b.no) || 0);
+              });
+
+              if (data.length === 0 && !loading) {
+                SEED_DATA.forEach(async (item) => await setDoc(doc(db, "dry_dock_schedules", item.id), item));
+              } else {
+                setSchedules(data);
+              }
+              setLoading(false);
+            }, () => setLoading(false));
+            return () => unsubscribe();
+          }, [user]);
+
+          const handleUpdate = async (id, field, value) => {
+            const docRef = doc(db, "dry_dock_schedules", id);
+            const updates = { [field]: value };
+
+            // Auto-calculate days if dates change
+            if (field === 'plannedPeriodStart' || field === 'plannedPeriodEnd') {
+                const ship = schedules.find(s => s.id === id);
+                if (ship) {
+                    const startDate = field === 'plannedPeriodStart' ? value : ship.plannedPeriodStart;
+                    const endDate = field === 'plannedPeriodEnd' ? value : ship.plannedPeriodEnd;
+                    
+                    if (startDate && endDate) {
+                        const start = new Date(startDate);
+                        const end = new Date(endDate);
+                        const diffTime = end - start;
+                        // Calculate days (inclusive)
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        if (!isNaN(diffDays)) {
+                            updates.days = diffDays;
+                        }
+                    }
+                }
+            }
+
+            await updateDoc(docRef, updates);
+          };
+
+          const isModified = (item, field) => {
+            if (!item.original) return false;
+            return item[field] !== item.original[field];
+          };
+
+          const getStyle = (item, field, baseStyle = "") => {
+            if (isModified(item, field)) return `text-red-600 font-bold bg-yellow-200 border-red-400 ${baseStyle}`;
+            return baseStyle;
+          };
+
+          const handleReset = async (item) => {
+            if (!item.original) return;
+            const docRef = doc(db, "dry_dock_schedules", item.id);
+            try {
+              // (2) Only reset planned period (Range)
+              await updateDoc(docRef, {
+                plannedPeriodStart: item.original.plannedPeriodStart || "",
+                plannedPeriodEnd: item.original.plannedPeriodEnd || ""
+              });
+            } catch (error) {
+              console.error("Error resetting document: ", error);
+              alert("Reset failed: " + error.message);
+            }
+          };
+
+          // Derived state for filters options
+          const uniqueShipyards = useMemo(() => {
+            const yards = new Set(schedules.map(s => s.shipyard).filter(Boolean));
+            return ['All', ...Array.from(yards).sort()];
+          }, [schedules]);
+
+          const uniquePICs = useMemo(() => {
+            const pics = new Set(schedules.map(s => s.pic).filter(Boolean));
+            return ['All', ...Array.from(pics).sort()];
+          }, [schedules]);
+
+          // Filtered data
+          const filteredSchedules = useMemo(() => {
+            return schedules.filter(ship => {
+              const matchShipyard = filterShipyard === 'All' || ship.shipyard === filterShipyard;
+              const matchPIC = filterPIC === 'All' || ship.pic === filterPIC;
+              const matchRenovation = filterRenovation === 'All' || (filterRenovation === 'Yes' && ship.renovation === 'V');
+              const matchScrubber = filterScrubber === 'All' || (filterScrubber === 'Yes' && ship.scrubber === 'V');
+              return matchShipyard && matchPIC && matchRenovation && matchScrubber;
+            });
+          }, [schedules, filterShipyard, filterPIC, filterRenovation, filterScrubber]);
+
+          const stats = useMemo(() => {
+            const total = schedules.length;
+            const reno = schedules.filter(s => s.renovation === 'V').length;
+            const scrub = schedules.filter(s => s.scrubber === 'V').length;
+            const logo = schedules.filter(s => s.logo === 'V').length;
+            return { total, reno, scrub, logo };
+          }, [schedules]);
+
+          if (loading) return <div className="p-10 text-center text-gray-500">正在讀取雲端資料庫...</div>;
+
+          return (
+            <div className="min-h-screen bg-slate-50 p-2 md:p-6 font-sans text-sm">
+              <PasswordModal 
+                isOpen={showPasswordModal} 
+                onClose={() => setShowPasswordModal(false)}
+                onSuccess={() => setIsLocked(false)}
+              />
+
+              <div className="max-w-[1400px] mx-auto space-y-6">
+                
+                {/* Top Header Section */}
+                <div className="flex flex-col md:flex-row justify-between items-center bg-slate-800 text-white p-6 rounded-2xl shadow-lg">
+                  <div className="flex items-center gap-4">
+                     <div className="p-3 bg-white/10 rounded-xl">
+                       <Anchor className="h-8 w-8 text-blue-400" />
+                     </div>
+                     <div>
+                       <h1 className="text-2xl font-bold tracking-wider">2026 年度船舶塢修總表</h1>
+                       <p className="text-slate-400 text-xs mt-1">即時協作系統 • Google Firestore Database</p>
+                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 mt-4 md:mt-0">
+                     <div className="text-right hidden sm:block border-r border-slate-600 pr-4 mr-2">
+                        <div className="text-[10px] uppercase text-slate-400 tracking-wider">Current Mode</div>
+                        <div className={`text-sm font-bold flex items-center gap-2 ${isLocked ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {isLocked ? 'VIEW ONLY' : 'EDIT ENABLED'}
+                        </div>
+                     </div>
+                     <button
+                        onClick={() => isLocked ? setShowPasswordModal(true) : setIsLocked(true)}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all font-bold shadow-lg ${
+                          isLocked 
+                            ? 'bg-red-500 hover:bg-red-600 text-white' 
+                            : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                        }`}
+                      >
+                        {isLocked ? <Lock size={18} /> : <Unlock size={18} />}
+                        {isLocked ? "點擊解鎖" : "鎖定編輯"}
+                      </button>
+                  </div>
+                </div>
+
+                {/* Statistics Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <StatCard 
+                    icon={Ship} 
+                    label="計畫修船數" 
+                    value={stats.total} 
+                    sub="艘" 
+                    colorClass="text-blue-600" 
+                    bgClass="bg-blue-100" 
+                  />
+                  <StatCard 
+                    icon={Anchor} 
+                    label="換新 LOGO" 
+                    value={stats.logo} 
+                    sub="艘" 
+                    colorClass="text-emerald-600" 
+                    bgClass="bg-emerald-100" 
+                  />
+                  <StatCard 
+                    icon={Hammer} 
+                    label="生活區裝修" 
+                    value={stats.reno} 
+                    sub="艘" 
+                    colorClass="text-purple-600" 
+                    bgClass="bg-purple-100" 
+                  />
+                  <StatCard 
+                    icon={Wind} 
+                    label="加裝 Scrubber" 
+                    value={stats.scrub} 
+                    sub="艘" 
+                    colorClass="text-orange-600" 
+                    bgClass="bg-orange-100" 
+                  />
+                </div>
+
+                {/* Filters Bar & Legend */}
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center text-xs">
+                   {/* Filter Inputs */}
+                   <div className="flex flex-wrap gap-3 items-center w-full md:w-auto">
+                        <div className="flex items-center gap-2 text-slate-500 font-bold bg-slate-50 px-2 py-1 rounded">
+                            <Filter size={14} /> 篩選條件:
+                        </div>
+                        
+                        {/* Shipyard Filter */}
+                        <div className="relative group">
+                            <select 
+                                className="pl-2 pr-6 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 appearance-none bg-slate-50 text-slate-700 font-medium cursor-pointer"
+                                value={filterShipyard}
+                                onChange={(e) => setFilterShipyard(e.target.value)}
+                            >
+                                {uniqueShipyards.map(yard => <option key={yard} value={yard}>{yard === 'All' ? '所有船廠' : yard}</option>)}
+                            </select>
+                        </div>
+
+                        {/* PIC Filter */}
+                         <div className="relative group">
+                            <select 
+                                className="pl-2 pr-6 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 appearance-none bg-slate-50 text-slate-700 font-medium cursor-pointer"
+                                value={filterPIC}
+                                onChange={(e) => setFilterPIC(e.target.value)}
+                            >
+                                {uniquePICs.map(pic => <option key={pic} value={pic}>{pic === 'All' ? '所有 PIC' : pic}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Renovation Filter */}
+                        <div className="relative group">
+                            <select 
+                                className="pl-2 pr-6 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 appearance-none bg-slate-50 text-slate-700 font-medium cursor-pointer"
+                                value={filterRenovation}
+                                onChange={(e) => setFilterRenovation(e.target.value)}
+                            >
+                                <option value="All">生活區 (全部)</option>
+                                <option value="Yes">有裝修</option>
+                            </select>
+                        </div>
+
+                        {/* Scrubber Filter */}
+                        <div className="relative group">
+                            <select 
+                                className="pl-2 pr-6 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 appearance-none bg-slate-50 text-slate-700 font-medium cursor-pointer"
+                                value={filterScrubber}
+                                onChange={(e) => setFilterScrubber(e.target.value)}
+                            >
+                                <option value="All">Scrubber (全部)</option>
+                                <option value="Yes">有加裝</option>
+                            </select>
+                        </div>
+                   </div>
+                   
+                   {/* Legend (Stripped down) */}
+                   <div className="flex items-center gap-2 bg-yellow-50 text-yellow-800 px-3 py-1.5 rounded-lg border border-yellow-100 mt-2 md:mt-0">
+                     <Info size={14} className="text-yellow-600"/>
+                     <span className="font-medium">編輯提示：黃底紅字代表資料與原始計畫不同</span>
+                   </div>
+                </div>
+
+                {/* Main Table */}
+                <div className="bg-white shadow-xl rounded-xl overflow-hidden border border-slate-200">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[1200px]">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200 h-12">
+                          <th className="px-4 text-center w-14">No.</th>
+                          <th className="px-4 w-36">船名 (Vessel)</th>
+                          <th className="px-4 w-32">PIC</th>
+                          <th className="px-4 w-28">Due Date</th>
+                          <th className="px-4 w-32">Survey</th>
+                          <th className="px-4 text-center min-w-[350px] bg-slate-100/50">預排修期 (Range)</th>
+                          <th className="px-4 text-center w-16">天數</th>
+                          <th className="px-4 w-40">船廠 (Shipyard)</th>
+                          
+                          <th className="px-2 text-center w-24 text-xs font-bold text-purple-700">生活區裝修</th>
+                          <th className="px-2 text-center w-24 text-xs font-bold text-orange-700">加裝 Scrubber</th>
+                          <th className="px-2 text-center w-24 text-xs font-bold text-emerald-700">換新 LOGO</th>
+                          
+                          <th className="px-4 min-w-[200px]">備註 (Remark)</th>
+                          {!isLocked && <th className="px-4 text-center w-12">Reset</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-sm">
+                        {filteredSchedules.map((ship, index) => (
+                          <tr key={ship.id} className="hover:bg-slate-50/80 transition-colors h-16 group">
+                            {/* Dynamic No. based on filtered index */}
+                            <td className="px-4 text-center font-mono text-slate-400 font-medium">{index + 1}</td>
+                            
+                            <td className="px-4">
+                              <div className="font-bold text-slate-800 text-base">{ship.vesselName}</div>
+                              <div className="text-xs text-slate-500 mt-0.5">{ship.chName}</div>
+                            </td>
+
+                            <td className="px-4 text-slate-600 font-medium">{ship.pic}</td>
+
+                            <td className="px-4 text-red-600 font-bold font-mono tracking-tight">{ship.dockDue}</td>
+
+                            <td className="px-4">
+                               <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${
+                                ship.survey.includes('特檢') 
+                                  ? 'text-red-700 bg-red-50 border-red-100' 
+                                  : 'text-blue-700 bg-blue-50 border-blue-100'
+                              }`}>
+                                {ship.survey}
+                              </span>
+                            </td>
+
+                            <td className="px-4 bg-slate-50/30">
+                              <div className="flex items-center gap-1.5 justify-center flex-nowrap">
+                                {isLocked ? (
+                                  <div className={`px-2 py-1 rounded ${getStyle(ship, 'plannedPeriodStart', 'text-slate-700 font-medium')}`}>
+                                     {ship.plannedPeriodStart || '-'}
+                                  </div>
+                                ) : (
+                                  <input 
+                                    type="date"
+                                    value={ship.plannedPeriodStart}
+                                    onChange={(e) => handleUpdate(ship.id, 'plannedPeriodStart', e.target.value)}
+                                    className={`w-36 px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-400 outline-none transition-shadow ${getStyle(ship, 'plannedPeriodStart')}`}
+                                  />
+                                )}
+                                <span className="text-slate-300">➜</span>
+                                {isLocked ? (
+                                  <div className={`px-2 py-1 rounded ${getStyle(ship, 'plannedPeriodEnd', 'text-slate-700 font-medium')}`}>
+                                     {ship.plannedPeriodEnd || '-'}
+                                  </div>
+                                ) : (
+                                  <input 
+                                    type="date"
+                                    value={ship.plannedPeriodEnd}
+                                    onChange={(e) => handleUpdate(ship.id, 'plannedPeriodEnd', e.target.value)}
+                                    className={`w-36 px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-400 outline-none transition-shadow ${getStyle(ship, 'plannedPeriodEnd')}`}
+                                  />
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="px-4 text-center font-bold text-slate-700 text-base">{ship.days}</td>
+
+                            <td className="px-4">
+                              {isLocked ? (
+                                <span className={`inline-block px-2.5 py-1 rounded-md font-medium text-xs ${getStyle(ship, 'shipyard', 
+                                  ship.shipyard.includes('中遠') ? 'text-blue-800 bg-blue-50 border border-blue-100' : 
+                                  ship.shipyard.includes('友聯') ? 'text-amber-800 bg-amber-50 border border-amber-100' : 'text-slate-600 bg-slate-100'
+                                )}`}>
+                                  {ship.shipyard}
+                                </span>
+                              ) : (
+                                <div className="relative">
+                                  <select
+                                    value={ship.shipyard}
+                                    onChange={(e) => handleUpdate(ship.id, 'shipyard', e.target.value)}
+                                    className={`w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-400 outline-none text-xs bg-white appearance-none cursor-pointer ${getStyle(ship, 'shipyard')}`}
+                                  >
+                                    {SHIPYARDS.map(yard => (
+                                      <option key={yard} value={yard}>{yard}</option>
+                                    ))}
+                                  </select>
+                                  <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                     <Edit3 size={12} />
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="px-2">
+                              <FeatureCell 
+                                active={ship.renovation} 
+                                icon={Hammer} 
+                                colorClass="text-purple-600" 
+                                isLocked={isLocked}
+                                onClick={() => handleUpdate(ship.id, 'renovation', ship.renovation === 'V' ? '' : 'V')}
+                              />
+                            </td>
+                            <td className="px-2">
+                              <FeatureCell 
+                                active={ship.scrubber} 
+                                icon={Wind} 
+                                colorClass="text-orange-600" 
+                                isLocked={isLocked}
+                                onClick={() => handleUpdate(ship.id, 'scrubber', ship.scrubber === 'V' ? '' : 'V')}
+                              />
+                            </td>
+                            <td className="px-2">
+                              <FeatureCell 
+                                active={ship.logo} 
+                                icon={Anchor} 
+                                colorClass="text-emerald-600" 
+                                isLocked={isLocked}
+                                onClick={() => handleUpdate(ship.id, 'logo', ship.logo === 'V' ? '' : 'V')}
+                              />
+                            </td>
+
+                            <td className="px-4">
+                              {isLocked ? (
+                                <div className={`flex items-start gap-1.5 text-xs p-2 rounded-lg border ${
+                                    ship.remark && ship.remark.trim() !== '' 
+                                    ? (isModified(ship, 'remark') ? 'bg-yellow-200 border-red-400 text-red-600 font-bold' : 'bg-yellow-50/50 border-yellow-100 text-slate-500')
+                                    : 'border-transparent text-slate-300'
+                                } max-w-[200px]`}>
+                                   {ship.remark && ship.remark.trim() !== '' && (
+                                       <Info size={14} className={`${isModified(ship, 'remark') ? 'text-red-600' : 'text-yellow-500'} flex-shrink-0 mt-0.5`} />
+                                   )}
+                                   <span className="leading-snug">{ship.remark || "-"}</span>
+                                </div>
+                              ) : (
+                                <textarea
+                                    value={ship.remark}
+                                    onChange={(e) => handleUpdate(ship.id, 'remark', e.target.value)}
+                                    className={`w-full text-xs p-2 border rounded focus:ring-2 focus:ring-blue-400 outline-none resize-none ${
+                                        isModified(ship, 'remark') && ship.remark && ship.remark.trim() !== ''
+                                        ? 'bg-yellow-200 border-red-400 text-red-600 font-bold' 
+                                        : 'border-slate-300'
+                                    }`}
+                                    rows={2}
+                                />
+                              )}
+                            </td>
+
+                            {!isLocked && (
+                              <td className="px-4 text-center">
+                                {/* (2) Reset button only visible if dates are modified */}
+                                {(isModified(ship, 'plannedPeriodStart') || isModified(ship, 'plannedPeriodEnd')) && (
+                                  <button 
+                                    onClick={() => handleReset(ship)}
+                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-all"
+                                    title="還原修期"
+                                  >
+                                    <RotateCcw size={16} />
+                                  </button>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                        {filteredSchedules.length === 0 && (
+                            <tr>
+                                <td colSpan="12" className="text-center py-8 text-slate-400">
+                                    沒有符合篩選條件的船舶資料
+                                </td>
+                            </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  <div className="bg-slate-50 p-4 border-t text-center text-xs text-slate-400 flex justify-between items-center">
+                    <span>System Status: <span className="text-emerald-500 font-bold">● Online</span></span>
+                    <span>Last sync: {new Date().toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<DryDockScheduleApp />);
     </script>
 </body>
 </html>
