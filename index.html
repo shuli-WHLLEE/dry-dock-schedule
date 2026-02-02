@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 年度船舶塢修總表 (Final V5)</title>
+    <title>2026 年度船舶塢修總表 (Final V6)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -26,24 +26,41 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         td { vertical-align: middle; }
-        input[type="date"] { background-color: transparent; font-family: monospace; color: inherit; font-weight: inherit; font-size: inherit; }
         
+        /* 日期輸入框預設樣式 */
+        input[type="date"] { 
+            background-color: transparent; 
+            font-family: monospace; 
+            color: inherit; 
+            font-weight: inherit; 
+            font-size: inherit; 
+            border: 1px solid #e2e8f0;
+            border-radius: 0.25rem;
+            padding: 0.1rem 0.25rem;
+        }
+
         /* 變更提示專用樣式 - 紅字粗體 + 亮黃底 */
         .changed-cell { 
-            background-color: #fef08a !important; /* 亮黃色 */
-            color: #dc2626 !important;           /* 紅色 */
+            background-color: #fef08a !important; /* 亮黃色 (Tailwind yellow-200) */
+            color: #dc2626 !important;           /* 紅色 (Tailwind red-600) */
             font-weight: 900 !important;         /* 粗體 */
         }
-        /* 讓內部的 input/select 也繼承樣式 */
-        .changed-cell input, .changed-cell select, .changed-cell span { 
+        
+        /* 讓內部的 input/select 也繼承樣式，確保輸入框變色 */
+        .changed-cell input, 
+        .changed-cell select, 
+        .changed-cell span, 
+        .changed-cell div { 
             color: #dc2626 !important; 
-            font-weight: 900 !important; 
+            font-weight: 900 !important;
+            background-color: transparent !important;
+            border-color: #dc2626 !important;
         }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans">
     
-    <!-- ★★★ Firebase Config (Updated) ★★★ -->
+    <!-- ★★★ Firebase Config (Final) ★★★ -->
     <script>
         window.USER_FIREBASE_CONFIG = {
             apiKey: "AIzaSyBjnlDmMoXLXfmfT0cx8Uys_lE98GE1G0s",
@@ -56,7 +73,7 @@
         };
     </script>
 
-    <!-- ★★★ 原始資料 (37筆正確版) ★★★ -->
+    <!-- ★★★ 原始資料 (37筆正確版) - 移除單引號後的標準 CSV ★★★ -->
     <script id="default-csv-data" type="text/csv">
 NO.,NAME,船名,Docking Due,Survey,修期,PIC,AUD,Start,To,End,Duration,Unit,Factory,Renovation,Scrubber,LOGO,REMARK
 1,WH326,璀春,2026/3/4,1.特檢,28,姚洪香,V,2026/1/1,~,2026/1/28,28,days,廣東中遠,V,V,V,5/8:企劃 配合2026春節調整修期.
@@ -352,8 +369,34 @@ NO.,NAME,船名,Docking Due,Survey,修期,PIC,AUD,Start,To,End,Duration,Unit,Fac
             };
 
             const handleDateChange = (id, field, newVal) => {
-                const formattedDate = formatFromISO(newVal);
-                handleUpdate(id, { [field]: formattedDate });
+                // 1. Get current row data
+                const currentRow = scheduleData.find(r => r.id === id);
+                if (!currentRow) return;
+
+                const formattedNewVal = formatFromISO(newVal);
+                
+                // 2. Calculate new duration
+                let startStr = field === 'rangeStart' ? formattedNewVal : currentRow.rangeStart;
+                let endStr = field === 'rangeEnd' ? formattedNewVal : currentRow.rangeEnd;
+                
+                let updates = { [field]: formattedNewVal };
+
+                if (startStr && endStr) {
+                    const startDate = new Date(formatToISO(startStr));
+                    const endDate = new Date(formatToISO(endStr));
+                    
+                    if (!isNaN(startDate) && !isNaN(endDate)) {
+                         const diffTime = endDate - startDate;
+                         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                         // Update days if valid
+                         if (diffDays > 0) {
+                             updates.days = diffDays.toString();
+                         }
+                    }
+                }
+
+                // 3. Update Firestore
+                handleUpdate(id, updates);
             };
 
             const toggleEditMode = () => {
@@ -438,6 +481,7 @@ NO.,NAME,船名,Docking Due,Survey,修期,PIC,AUD,Start,To,End,Duration,Unit,Fac
                         isChanged = true;
                     }
                 } else {
+                    // 簡單字串比對，忽略空白
                     if ((row[field] || '').trim() !== (originalRow[field] || '').trim()) {
                         isChanged = true;
                     }
